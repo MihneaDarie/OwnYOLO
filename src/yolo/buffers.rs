@@ -1,20 +1,17 @@
-use ndarray::{Array3, Array4 };
+use ndarray::{Array3, Array4};
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct C2FBuffer {
     pub initial: Array4<f32>,
     pub bottlenecks: Vec<BottleneckBuffer>,
-    pub split_0: Array4<f32>,
     pub split_1: Array4<f32>,
-    pub concat: Array4<f32>,
     pub last: Array4<f32>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct BottleneckBuffer {
     pub cv1_out: Array4<f32>,
     pub cv2_out: Array4<f32>,
-    pub add_out: Array4<f32>,
 }
 
 pub struct ConvBuffer {
@@ -32,16 +29,11 @@ pub struct SPPFBuffer {
 
 pub struct DetectHeadBuffer {
     pub scale_outputs: [DetectScaleBuffer; 3],
-    pub anchor_outputs: Vec<Array3<f32>>,
     pub final_concat: Array3<f32>,
-    pub bbox_pred: Array3<f32>,
     pub class_pred: Array3<f32>,
-    pub bbox_coords: Array3<f32>,
-    pub class_scores: Array3<f32>,
     pub final_output: Array3<f32>,
 }
 
-#[derive(Clone)]
 pub struct DetectScaleBuffer {
     pub cv2_0_out: Array4<f32>,
     pub cv2_1_out: Array4<f32>,
@@ -49,7 +41,6 @@ pub struct DetectScaleBuffer {
     pub cv3_0_out: Array4<f32>,
     pub cv3_1_out: Array4<f32>,
     pub class_out: Array4<f32>,
-    pub combined: Array4<f32>,
 }
 
 pub struct UpsampleBuffer {
@@ -74,239 +65,203 @@ pub struct Buffers {
 
     pub up1_buffer: UpsampleBuffer,
     pub concat1_buffer: ConcatBuffer,
-    
+
     pub model_12_buffer: C2FBuffer,
-    
+
     pub up2_buffer: UpsampleBuffer,
     pub concat2_buffer: ConcatBuffer,
-    
+
     pub model_15_buffer: C2FBuffer,
     pub model_16_buffer: ConvBuffer,
-    
+
     pub concat3_buffer: ConcatBuffer,
-    
+
     pub model_18_buffer: C2FBuffer,
     pub model_19_buffer: ConvBuffer,
-    
+
     pub concat4_buffer: ConcatBuffer,
-    
+
     pub model_21_buffer: C2FBuffer,
     pub model_22_buffer: DetectHeadBuffer,
+    
 }
 
 impl Buffers {
     pub fn new() -> Self {
         Self {
             model_0_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 16, 208, 208)),
+                conv_out: Array4::zeros((1, 16, 320, 320)),
             },
             model_1_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 32, 104, 104)),
+                conv_out: Array4::zeros((1, 32, 160, 160)),
             },
             model_2_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 32, 104, 104)),
+                initial: Array4::zeros((1, 32, 160, 160)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 16, 104, 104)),
-                    cv2_out: Array4::zeros((1, 16, 104, 104)),
-                    add_out: Array4::zeros((1, 16, 104, 104)),
+                    cv1_out: Array4::zeros((1, 16, 160, 160)),
+                    cv2_out: Array4::zeros((1, 16, 160, 160)),
                 }],
-                split_0: Array4::zeros((1, 16, 104, 104)),
-                split_1: Array4::zeros((1, 16, 104, 104)),
-                concat: Array4::zeros((1, 48, 104, 104)),
-                last: Array4::zeros((1, 32, 104, 104)),
+                split_1: Array4::zeros((1, 16, 160, 160)),
+                last: Array4::zeros((1, 32, 160, 160)),
             },
             model_3_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 64, 52, 52)),
+                conv_out: Array4::zeros((1, 64, 80, 80)),
             },
             model_4_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 64, 52, 52)),
+                initial: Array4::zeros((1, 64, 80, 80)),
                 bottlenecks: vec![
                     BottleneckBuffer {
-                        cv1_out: Array4::zeros((1, 32, 52, 52)),
-                        cv2_out: Array4::zeros((1, 32, 52, 52)),
-                        add_out: Array4::zeros((1, 32, 52, 52)),
+                        cv1_out: Array4::zeros((1, 32, 80, 80)),
+                        cv2_out: Array4::zeros((1, 32, 80, 80)),
                     },
                     BottleneckBuffer {
-                        cv1_out: Array4::zeros((1, 32, 52, 52)),
-                        cv2_out: Array4::zeros((1, 32, 52, 52)),
-                        add_out: Array4::zeros((1, 32, 52, 52)),
+                        cv1_out: Array4::zeros((1, 32, 80, 80)),
+                        cv2_out: Array4::zeros((1, 32, 80, 80)),
                     },
                 ],
-                split_0: Array4::zeros((1, 32, 52, 52)),
-                split_1: Array4::zeros((1, 32, 52, 52)),
-                concat: Array4::zeros((1, 128, 52, 52)),
-                last: Array4::zeros((1, 64, 52, 52)),
+                split_1: Array4::zeros((1, 32, 80, 80)),
+                last: Array4::zeros((1, 64, 80, 80)),
             },
             model_5_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 128, 26, 26)),
+                conv_out: Array4::zeros((1, 128, 40, 40)),
             },
             model_6_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 128, 26, 26)),
+                initial: Array4::zeros((1, 128, 40, 40)),
                 bottlenecks: vec![
                     BottleneckBuffer {
-                        cv1_out: Array4::zeros((1, 64, 26, 26)),
-                        cv2_out: Array4::zeros((1, 64, 26, 26)),
-                        add_out: Array4::zeros((1, 64, 26, 26)),
+                        cv1_out: Array4::zeros((1, 64, 40, 40)),
+                        cv2_out: Array4::zeros((1, 64, 40, 40)),
                     },
                     BottleneckBuffer {
-                        cv1_out: Array4::zeros((1, 64, 26, 26)),
-                        cv2_out: Array4::zeros((1, 64, 26, 26)),
-                        add_out: Array4::zeros((1, 64, 26, 26)),
+                        cv1_out: Array4::zeros((1, 64, 40, 40)),
+                        cv2_out: Array4::zeros((1, 64, 40, 40)),
                     },
                 ],
-                split_0: Array4::zeros((1, 64, 26, 26)),
-                split_1: Array4::zeros((1, 64, 26, 26)),
-                concat: Array4::zeros((1, 256, 26, 26)),
-                last: Array4::zeros((1, 128, 26, 26)),
+                split_1: Array4::zeros((1, 64, 40, 40)),
+                last: Array4::zeros((1, 128, 40, 40)),
             },
             model_7_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 256, 13, 13)),
+                conv_out: Array4::zeros((1, 256, 20, 20)),
             },
             model_8_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 256, 13, 13)),
+                initial: Array4::zeros((1, 256, 20, 20)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 128, 13, 13)),
-                    cv2_out: Array4::zeros((1, 128, 13, 13)),
-                    add_out: Array4::zeros((1, 128, 13, 13)),
+                    cv1_out: Array4::zeros((1, 128, 20, 20)),
+                    cv2_out: Array4::zeros((1, 128, 20, 20)),
                 }],
-                split_0: Array4::zeros((1, 128, 13, 13)),
-                split_1: Array4::zeros((1, 128, 13, 13)),
-                concat: Array4::zeros((1, 384, 13, 13)),
-                last: Array4::zeros((1, 256, 13, 13)),
+                split_1: Array4::zeros((1, 128, 20, 20)),
+                last: Array4::zeros((1, 256, 20, 20)),
             },
             model_9_buffer: SPPFBuffer {
-                cv1_out: Array4::zeros((1, 128, 13, 13)),
-                pool_1: Array4::zeros((1, 128, 13, 13)),
-                pool_2: Array4::zeros((1, 128, 13, 13)),
-                pool_3: Array4::zeros((1, 128, 13, 13)),
-                concat: Array4::zeros((1, 512, 13, 13)),
-                cv2_out: Array4::zeros((1, 256, 13, 13)),
+                cv1_out: Array4::zeros((1, 128, 20, 20)),
+                pool_1: Array4::zeros((1, 128, 20, 20)),
+                pool_2: Array4::zeros((1, 128, 20, 20)),
+                pool_3: Array4::zeros((1, 128, 20, 20)),
+                concat: Array4::zeros((1, 512, 20, 20)),
+                cv2_out: Array4::zeros((1, 256, 20, 20)),
             },
-            
+
             up1_buffer: UpsampleBuffer {
-                output: Array4::zeros((1, 256, 26, 26)),
+                output: Array4::zeros((1, 256, 40, 40)),
             },
             concat1_buffer: ConcatBuffer {
-                output: Array4::zeros((1, 384, 26, 26)),
+                output: Array4::zeros((1, 384, 40, 40)),
             },
-            
+
             model_12_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 128, 26, 26)),
+                initial: Array4::zeros((1, 128, 40, 40)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 64, 26, 26)),
-                    cv2_out: Array4::zeros((1, 64, 26, 26)),
-                    add_out: Array4::zeros((1, 64, 26, 26)),
+                    cv1_out: Array4::zeros((1, 64, 40, 40)),
+                    cv2_out: Array4::zeros((1, 64, 40, 40)),
                 }],
-                split_0: Array4::zeros((1, 64, 26, 26)),
-                split_1: Array4::zeros((1, 64, 26, 26)),
-                concat: Array4::zeros((1, 192, 26, 26)),
-                last: Array4::zeros((1, 128, 26, 26)),
+                split_1: Array4::zeros((1, 64, 40, 40)),
+                last: Array4::zeros((1, 128, 40, 40)),
             },
-            
+
             up2_buffer: UpsampleBuffer {
-                output: Array4::zeros((1, 128, 52, 52)),
+                output: Array4::zeros((1, 128, 80, 80)),
             },
             concat2_buffer: ConcatBuffer {
-                output: Array4::zeros((1, 192, 52, 52)),
+                output: Array4::zeros((1, 192, 80, 80)),
             },
-            
+
             model_15_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 64, 52, 52)),
+                initial: Array4::zeros((1, 64, 80, 80)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 32, 52, 52)),
-                    cv2_out: Array4::zeros((1, 32, 52, 52)),
-                    add_out: Array4::zeros((1, 32, 52, 52)),
+                    cv1_out: Array4::zeros((1, 32, 80, 80)),
+                    cv2_out: Array4::zeros((1, 32, 80, 80)),
                 }],
-                split_0: Array4::zeros((1, 32, 52, 52)),
-                split_1: Array4::zeros((1, 32, 52, 52)),
-                concat: Array4::zeros((1, 96, 52, 52)),
-                last: Array4::zeros((1, 64, 52, 52)),
+                split_1: Array4::zeros((1, 32, 80, 80)),
+                last: Array4::zeros((1, 64, 80, 80)),
             },
-            
+
             model_16_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 64, 26, 26)),
+                conv_out: Array4::zeros((1, 64, 40, 40)),
             },
-            
+
             concat3_buffer: ConcatBuffer {
-                output: Array4::zeros((1, 192, 26, 26)),
+                output: Array4::zeros((1, 192, 40, 40)),
             },
-            
+
             model_18_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 128, 26, 26)),
+                initial: Array4::zeros((1, 128, 40, 40)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 64, 26, 26)),
-                    cv2_out: Array4::zeros((1, 64, 26, 26)),
-                    add_out: Array4::zeros((1, 64, 26, 26)),
+                    cv1_out: Array4::zeros((1, 64, 40, 40)),
+                    cv2_out: Array4::zeros((1, 64, 40, 40)),
                 }],
-                split_0: Array4::zeros((1, 64, 26, 26)),
-                split_1: Array4::zeros((1, 64, 26, 26)),
-                concat: Array4::zeros((1, 192, 26, 26)),
-                last: Array4::zeros((1, 128, 26, 26)),
+                split_1: Array4::zeros((1, 64, 40, 40)),
+                last: Array4::zeros((1, 128, 40, 40)),
             },
-            
+
             model_19_buffer: ConvBuffer {
-                conv_out: Array4::zeros((1, 128, 13, 13)),
+                conv_out: Array4::zeros((1, 128, 20, 20)),
             },
-            
+
             concat4_buffer: ConcatBuffer {
-                output: Array4::zeros((1, 384, 13, 13)),
+                output: Array4::zeros((1, 384, 20, 20)),
             },
-            
+
             model_21_buffer: C2FBuffer {
-                initial: Array4::zeros((1, 256, 13, 13)),
+                initial: Array4::zeros((1, 256, 20, 20)),
                 bottlenecks: vec![BottleneckBuffer {
-                    cv1_out: Array4::zeros((1, 128, 13, 13)),
-                    cv2_out: Array4::zeros((1, 128, 13, 13)),
-                    add_out: Array4::zeros((1, 128, 13, 13)),
+                    cv1_out: Array4::zeros((1, 128, 20, 20)),
+                    cv2_out: Array4::zeros((1, 128, 20, 20)),
                 }],
-                split_0: Array4::zeros((1, 128, 13, 13)),
-                split_1: Array4::zeros((1, 128, 13, 13)),
-                concat: Array4::zeros((1, 384, 13, 13)),
-                last: Array4::zeros((1, 256, 13, 13)),
+                split_1: Array4::zeros((1, 128, 20, 20)),
+                last: Array4::zeros((1, 256, 20, 20)),
             },
-            
+
             model_22_buffer: DetectHeadBuffer {
                 scale_outputs: [
                     DetectScaleBuffer {
-                        cv2_0_out: Array4::zeros((1, 64, 52, 52)),
-                        cv2_1_out: Array4::zeros((1, 64, 52, 52)),
-                        bbox_out: Array4::zeros((1, 64, 52, 52)),
-                        cv3_0_out: Array4::zeros((1, 80, 52, 52)),
-                        cv3_1_out: Array4::zeros((1, 80, 52, 52)),
-                        class_out: Array4::zeros((1, 80, 52, 52)),
-                        combined: Array4::zeros((1, 144, 52, 52)),
+                        cv2_0_out: Array4::zeros((1, 64, 80, 80)),
+                        cv2_1_out: Array4::zeros((1, 64, 80, 80)),
+                        bbox_out: Array4::zeros((1, 64, 80, 80)),
+                        cv3_0_out: Array4::zeros((1, 80, 80, 80)),
+                        cv3_1_out: Array4::zeros((1, 80, 80, 80)),
+                        class_out: Array4::zeros((1, 80, 80, 80)),
                     },
                     DetectScaleBuffer {
-                        cv2_0_out: Array4::zeros((1, 64, 26, 26)),
-                        cv2_1_out: Array4::zeros((1, 64, 26, 26)),
-                        bbox_out: Array4::zeros((1, 64, 26, 26)),
-                        cv3_0_out: Array4::zeros((1, 80, 26, 26)),
-                        cv3_1_out: Array4::zeros((1, 80, 26, 26)),
-                        class_out: Array4::zeros((1, 80, 26, 26)),
-                        combined: Array4::zeros((1, 144, 26, 26)),
+                        cv2_0_out: Array4::zeros((1, 64, 40, 40)),
+                        cv2_1_out: Array4::zeros((1, 64, 40, 40)),
+                        bbox_out: Array4::zeros((1, 64, 40, 40)),
+                        cv3_0_out: Array4::zeros((1, 80, 40, 40)),
+                        cv3_1_out: Array4::zeros((1, 80, 40, 40)),
+                        class_out: Array4::zeros((1, 80, 40, 40)),
                     },
                     DetectScaleBuffer {
-                        cv2_0_out: Array4::zeros((1, 64, 13, 13)),
-                        cv2_1_out: Array4::zeros((1, 64, 13, 13)),
-                        bbox_out: Array4::zeros((1, 64, 13, 13)),
-                        cv3_0_out: Array4::zeros((1, 80, 13, 13)),
-                        cv3_1_out: Array4::zeros((1, 80, 13, 13)),
-                        class_out: Array4::zeros((1, 80, 13, 13)),
-                        combined: Array4::zeros((1, 144, 13, 13)),
+                        cv2_0_out: Array4::zeros((1, 64, 20, 20)),
+                        cv2_1_out: Array4::zeros((1, 64, 20, 20)),
+                        bbox_out: Array4::zeros((1, 64, 20, 20)),
+                        cv3_0_out: Array4::zeros((1, 80, 20, 20)),
+                        cv3_1_out: Array4::zeros((1, 80, 20, 20)),
+                        class_out: Array4::zeros((1, 80, 20, 20)),
                     },
                 ],
-                anchor_outputs: vec![
-                    Array3::zeros((1, 144, 2704)),
-                    Array3::zeros((1, 144, 676)),
-                    Array3::zeros((1, 144, 169)),
-                ],
-                final_concat: Array3::zeros((1, 144, 3549)),
-                bbox_pred: Array3::zeros((1, 64, 3549)),
-                class_pred: Array3::zeros((1, 80, 3549)),
-                bbox_coords: Array3::zeros((1, 4, 3549)),
-                class_scores: Array3::zeros((1, 80, 3549)),
-                final_output: Array3::zeros((1, 84, 3549)),
+                final_concat: Array3::zeros((1, 144, 8400)),
+                class_pred: Array3::zeros((1, 80, 8400)),
+                final_output: Array3::zeros((1, 84, 8400)),
             },
-        }
+                    }
     }
 }
