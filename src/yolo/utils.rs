@@ -3,18 +3,14 @@ use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array4};
 use rayon::prelude::*;
 
+use crate::yolo::gemm::sgemm_bias_parallel;
+
 use super::buffers::C2FBuffer;
-use super::gemm::sgemm_parallel;
 use super::yolov8::C2fWeights;
 
 #[inline(always)]
 pub fn sigmoid(x: f32) -> f32 {
     1.0 / (1.0 + (-x).exp())
-}
-
-#[inline(always)]
-fn silu(z: f32) -> f32 {
-    z / (1.0 + (-z).exp())
 }
 
 #[inline(always)]
@@ -30,30 +26,22 @@ pub struct Conv2D {
     pub stride: usize,
 }
 
-pub const CFG_1X1_S1_P0: Conv2D = Conv2D {
-    pad: 0,
-    stride: 1,
-};
-pub const CFG_3X3_S1_P1: Conv2D = Conv2D {
-    pad: 1,
-    stride: 1,
-};
+pub const CFG_1X1_S1_P0: Conv2D = Conv2D { pad: 0, stride: 1 };
+pub const CFG_3X3_S1_P1: Conv2D = Conv2D { pad: 1, stride: 1 };
 
 #[inline]
 fn im2col_3x3_s1p1(input: &[f32], h: usize, w: usize, col_buffer: &mut [f32]) {
     let hw = h * w;
-
     col_buffer
         .par_chunks_mut(9 * hw)
         .enumerate()
         .for_each(|(ic, chunk)| {
-            let in_c_base = ic * h * w;
+            let in_c_base = ic * hw;
 
             for ky in 0..3usize {
                 for kx in 0..3usize {
                     let k_idx = ky * 3 + kx;
                     let col_row = &mut chunk[k_idx * hw..(k_idx + 1) * hw];
-
                     let dy = ky as isize - 1;
                     let dx = kx as isize - 1;
 
@@ -67,10 +55,8 @@ fn im2col_3x3_s1p1(input: &[f32], h: usize, w: usize, col_buffer: &mut [f32]) {
                             }
                         } else {
                             let in_row_base = in_c_base + (iy as usize) * w;
-
                             for ox in 0..w {
                                 let ix = ox as isize + dx;
-
                                 col_row[out_row_start + ox] = if ix < 0 || ix >= w as isize {
                                     0.0
                                 } else {
@@ -116,10 +102,8 @@ fn im2col_3x3_s2p1(
                             }
                         } else {
                             let in_row_base = in_c_base + (iy as usize) * win;
-
                             for ox in 0..wout {
                                 let ix = (ox * 2 + kx) as isize - 1;
-
                                 col_row[out_row_start + ox] = if ix < 0 || ix >= win as isize {
                                     0.0
                                 } else {
@@ -144,7 +128,14 @@ pub fn conv_silu_into(
     let (cout, _, kh, kw) = w.dim();
 
     if kh == 1 && kw == 1 && cfg.pad == 0 && cfg.stride == 1 {
-        return conv1x1_silu_into(x, w, conv_bias, out);
+        let hw = hin * win;
+        let xs = x.as_slice_memory_order().unwrap();
+        let ws = w.as_slice_memory_order().unwrap();
+        let out_sl = out.as_slice_memory_order_mut().unwrap();
+        let bias = conv_bias.map(|b| b.as_slice().unwrap());
+
+        sgemm_bias_parallel(cout, hw, cin, ws, xs, bias, out_sl, true);
+        return Ok(());
     }
 
     let hout = (hin + 2 * cfg.pad - kh) / cfg.stride + 1;
@@ -164,59 +155,11 @@ pub fn conv_silu_into(
         im2col_3x3_s2p1(xs, hin, win, hout, wout, &mut col_buffer);
     }
 
-    if let Some(b) = conv_bias {
-        out_sl
-            .par_chunks_mut(hw_out)
-            .enumerate()
-            .for_each(|(oc, row)| row.fill(b[oc]));
-    } else {
-        out_sl.fill(0.0);
-    }
-
     let k_dim = cin * 9;
+    let bias = conv_bias.map(|b| b.as_slice().unwrap());
 
-    sgemm_parallel(
-        cout,
-        hw_out,
-        k_dim,
-        1.0,
-        ws,
-        &col_buffer,
-        1.0,
-        out_sl,
-    );
+    sgemm_bias_parallel(cout, hw_out, k_dim, ws, &col_buffer, bias, out_sl, true);
 
-    out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
-
-    Ok(())
-}
-
-fn conv1x1_silu_into(
-    x: &Array4<f32>,
-    w: &Array4<f32>,
-    conv_bias: Option<&Array1<f32>>,
-    out: &mut Array4<f32>,
-) -> Result<()> {
-    let (_, cin, h, ww) = x.dim();
-    let (cout, _, _, _) = w.dim();
-    let hw = h * ww;
-
-    let xs = x.as_slice_memory_order().unwrap();
-    let ws = w.as_slice_memory_order().unwrap();
-    let out_sl = out.as_slice_memory_order_mut().unwrap();
-
-    if let Some(b) = conv_bias {
-        out_sl
-            .par_chunks_mut(hw)
-            .enumerate()
-            .for_each(|(oc, row)| row.fill(b[oc]));
-    } else {
-        out_sl.fill(0.0);
-    }
-
-    sgemm_parallel(cout, hw, cin, 1.0, ws, xs, 1.0, out_sl);
-
-    out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
     Ok(())
 }
 
@@ -233,38 +176,22 @@ pub fn conv1x1_silu_into_blocks(
     let wsl = w.as_slice_memory_order().unwrap();
     let out_sl = out.as_slice_memory_order_mut().unwrap();
 
-    let mut k_offs = Vec::with_capacity(blocks.len());
-    let mut off = 0usize;
-    for &(_, k) in blocks.iter() {
-        k_offs.push(off);
-        off += k;
-    }
+    let total_channels: usize = blocks.iter().map(|(_, k)| *k).sum();
+    let mut concat_input = vec![0.0f32; total_channels * hw];
 
-    if let Some(b) = bias {
-        out_sl
-            .par_chunks_mut(hw)
-            .enumerate()
-            .for_each(|(oc, row)| row.fill(b[oc]));
-    } else {
-        out_sl.fill(0.0);
-    }
-
-    for ((x_block, k), k0) in blocks.iter().zip(k_offs.iter()) {
-        if *k == 0 {
-            continue;
+    let mut offset = 0;
+    for (block_data, k) in blocks.iter() {
+        if *k > 0 {
+            let block_size = *k * hw;
+            concat_input[offset..offset + block_size].copy_from_slice(&block_data[..block_size]);
+            offset += block_size;
         }
-
-        let mut w_block = vec![0.0f32; cout * *k];
-        for oc in 0..cout {
-            for j in 0..*k {
-                w_block[oc * *k + j] = wsl[oc * cin + *k0 + j];
-            }
-        }
-
-        sgemm_parallel(cout, hw, *k, 1.0, &w_block, x_block, 1.0, out_sl);
     }
 
-    out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
+    let bias_slice = bias.map(|b| b.as_slice().unwrap());
+
+    sgemm_bias_parallel(cout, hw, cin, wsl, &concat_input, bias_slice, out_sl, true);
+
     Ok(())
 }
 
@@ -285,10 +212,10 @@ pub fn c2f_into(x: &Array4<f32>, w: &C2fWeights, buf: &mut C2FBuffer) -> Result<
     let y0 = &init_sl[0..hidden * hw];
     let y1_init = &init_sl[hidden * hw..2 * hidden * hw];
 
-    {
-        let prev_dst = buf.split_1.as_slice_memory_order_mut().unwrap();
-        prev_dst.copy_from_slice(y1_init);
-    }
+    buf.split_1
+        .as_slice_memory_order_mut()
+        .unwrap()
+        .copy_from_slice(y1_init);
 
     let nb = w.bottlenecks.len();
     for i in 0..nb {
@@ -316,11 +243,10 @@ pub fn c2f_into(x: &Array4<f32>, w: &C2fWeights, buf: &mut C2FBuffer) -> Result<
         let dst = bbuf.cv2_out.as_slice_memory_order_mut().unwrap();
         add_inplace(dst, src);
 
-        {
-            let src_out = buf.bottlenecks[i].cv2_out.as_slice_memory_order().unwrap();
-            let prev_dst = buf.split_1.as_slice_memory_order_mut().unwrap();
-            prev_dst.copy_from_slice(src_out);
-        }
+        buf.split_1
+            .as_slice_memory_order_mut()
+            .unwrap()
+            .copy_from_slice(buf.bottlenecks[i].cv2_out.as_slice_memory_order().unwrap());
     }
 
     let empty: &[f32] = &[];

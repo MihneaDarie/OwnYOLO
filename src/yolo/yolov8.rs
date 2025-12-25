@@ -1,5 +1,8 @@
 use crate::yolo::{
-    buffers::*, gemm::sgemm_parallel, utils::{Conv2D, c2f_into, conv_silu_into, sigmoid}
+    buffers::*,
+    gemm::sgemm_bias_parallel,
+    time::print_time,
+    utils::{Conv2D, c2f_into, conv_silu_into, sigmoid},
 };
 use anyhow::Result;
 use ndarray::{Array1, Array3, Array4, ArrayD};
@@ -11,7 +14,7 @@ use rayon::{
     join,
     slice::ParallelSliceMut,
 };
-use std::{cell::RefCell, fs::File};
+use std::{cell::RefCell, fs::File, time::Instant};
 
 pub const COCO_CLASSES: [&str; 80] = [
     "person",
@@ -312,7 +315,6 @@ impl YoloV8 {
             &CONV_3X3_S2,
             &mut buffers.model_0_buffer.conv_out,
         )?;
-
         conv_silu_into(
             &buffers.model_0_buffer.conv_out,
             &self.weights.model_1.conv_weight,
@@ -941,35 +943,16 @@ pub fn conv_linear_into(
     bias: Option<&Array1<f32>>,
     out: &mut Array4<f32>,
 ) -> Result<()> {
-    let (_, cin, h, wout) = x.dim();
+    let (_, cin, h, wout_dim) = x.dim();
     let (cout, _, _, _) = w.dim();
-
-    let hw = h * wout;
+    let hw = h * wout_dim;
 
     let xs = x.as_slice_memory_order().unwrap();
     let ws = w.as_slice_memory_order().unwrap();
     let out_sl = out.as_slice_memory_order_mut().unwrap();
+    let bias_slice = bias.map(|b| b.as_slice().unwrap());
 
-    let beta = if let Some(b) = bias {
-        out_sl
-            .par_chunks_mut(hw)
-            .enumerate()
-            .for_each(|(oc, row)| row.fill(b[oc]));
-        1.0f32
-    } else {
-        0.0f32 
-    };
-
-    sgemm_parallel(
-        cout,
-        hw,
-        cin,
-        1.0,
-        ws,
-        xs,
-        beta,
-        out_sl,
-    );
+    sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, false);
 
     Ok(())
 }
