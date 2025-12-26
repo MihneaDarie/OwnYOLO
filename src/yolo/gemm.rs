@@ -3,10 +3,7 @@ use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-#[inline(always)]
-fn silu(x: f32) -> f32 {
-    x / (1.0 + (-x).exp())
-}
+use crate::yolo::utils::silu;
 
 const MC: usize = 64;
 const KC: usize = 256;

@@ -8,6 +8,6 @@ fn get_global_timer() -> &'static Instant {
 }
 
 pub fn print_time(message: &str) {
-    let seconds = get_global_timer().elapsed().as_secs_f64();
+    let seconds = get_global_timer().elapsed().as_micros();
     println!("{message}: {seconds}");
 }
