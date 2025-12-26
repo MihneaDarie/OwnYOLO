@@ -12,31 +12,18 @@ const MR: usize = 8;
 const NR: usize = 8;
 
 #[inline(always)]
-unsafe fn micro_kernel_accum(
+unsafe fn micro_kernel_scalar(
     mr: usize,
     nr: usize,
     k: usize,
-    alpha: f32,
     a: *const f32,
     lda: usize,
     b: *const f32,
     ldb: usize,
     c: *mut f32,
     ldc: usize,
+    accumulate: bool,
 ) {
-    #[cfg(target_arch = "x86_64")]
-    {
-        if mr == MR
-            && nr == NR
-            && is_x86_feature_detected!("avx2")
-            && is_x86_feature_detected!("fma")
-        {
-            unsafe {
-                micro_kernel_8x8_avx2_accum(k, alpha, a, lda, b, ldb, c, ldc);
-            }
-            return;
-        }
-    }
     let mut acc = [[0.0f32; NR]; MR];
 
     unsafe {
@@ -48,12 +35,18 @@ unsafe fn micro_kernel_accum(
                 }
             }
         }
-    }
 
-    unsafe {
-        for i in 0..mr {
-            for j in 0..nr {
-                *c.add(i * ldc + j) += alpha * acc[i][j];
+        if accumulate {
+            for i in 0..mr {
+                for j in 0..nr {
+                    *c.add(i * ldc + j) += acc[i][j];
+                }
+            }
+        } else {
+            for i in 0..mr {
+                for j in 0..nr {
+                    *c.add(i * ldc + j) = acc[i][j];
+                }
             }
         }
     }
@@ -61,15 +54,15 @@ unsafe fn micro_kernel_accum(
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2,fma")]
-unsafe fn micro_kernel_8x8_avx2_accum(
+unsafe fn micro_kernel_8x8_avx2(
     k: usize,
-    alpha: f32,
     a: *const f32,
     lda: usize,
     b: *const f32,
     ldb: usize,
     c: *mut f32,
     ldc: usize,
+    accumulate: bool,
 ) {
     let mut c0 = _mm256_setzero_ps();
     let mut c1 = _mm256_setzero_ps();
@@ -103,25 +96,34 @@ unsafe fn micro_kernel_8x8_avx2_accum(
             c7 = _mm256_fmadd_ps(a7, b_row, c7);
         }
 
-        let alpha_v = _mm256_set1_ps(alpha);
+        if accumulate {
+            let c0_old = _mm256_loadu_ps(c);
+            let c1_old = _mm256_loadu_ps(c.add(ldc));
+            let c2_old = _mm256_loadu_ps(c.add(2 * ldc));
+            let c3_old = _mm256_loadu_ps(c.add(3 * ldc));
+            let c4_old = _mm256_loadu_ps(c.add(4 * ldc));
+            let c5_old = _mm256_loadu_ps(c.add(5 * ldc));
+            let c6_old = _mm256_loadu_ps(c.add(6 * ldc));
+            let c7_old = _mm256_loadu_ps(c.add(7 * ldc));
 
-        let c0_old = _mm256_loadu_ps(c);
-        let c1_old = _mm256_loadu_ps(c.add(ldc));
-        let c2_old = _mm256_loadu_ps(c.add(2 * ldc));
-        let c3_old = _mm256_loadu_ps(c.add(3 * ldc));
-        let c4_old = _mm256_loadu_ps(c.add(4 * ldc));
-        let c5_old = _mm256_loadu_ps(c.add(5 * ldc));
-        let c6_old = _mm256_loadu_ps(c.add(6 * ldc));
-        let c7_old = _mm256_loadu_ps(c.add(7 * ldc));
-
-        _mm256_storeu_ps(c, _mm256_fmadd_ps(alpha_v, c0, c0_old));
-        _mm256_storeu_ps(c.add(ldc), _mm256_fmadd_ps(alpha_v, c1, c1_old));
-        _mm256_storeu_ps(c.add(2 * ldc), _mm256_fmadd_ps(alpha_v, c2, c2_old));
-        _mm256_storeu_ps(c.add(3 * ldc), _mm256_fmadd_ps(alpha_v, c3, c3_old));
-        _mm256_storeu_ps(c.add(4 * ldc), _mm256_fmadd_ps(alpha_v, c4, c4_old));
-        _mm256_storeu_ps(c.add(5 * ldc), _mm256_fmadd_ps(alpha_v, c5, c5_old));
-        _mm256_storeu_ps(c.add(6 * ldc), _mm256_fmadd_ps(alpha_v, c6, c6_old));
-        _mm256_storeu_ps(c.add(7 * ldc), _mm256_fmadd_ps(alpha_v, c7, c7_old));
+            _mm256_storeu_ps(c, _mm256_add_ps(c0_old, c0));
+            _mm256_storeu_ps(c.add(ldc), _mm256_add_ps(c1_old, c1));
+            _mm256_storeu_ps(c.add(2 * ldc), _mm256_add_ps(c2_old, c2));
+            _mm256_storeu_ps(c.add(3 * ldc), _mm256_add_ps(c3_old, c3));
+            _mm256_storeu_ps(c.add(4 * ldc), _mm256_add_ps(c4_old, c4));
+            _mm256_storeu_ps(c.add(5 * ldc), _mm256_add_ps(c5_old, c5));
+            _mm256_storeu_ps(c.add(6 * ldc), _mm256_add_ps(c6_old, c6));
+            _mm256_storeu_ps(c.add(7 * ldc), _mm256_add_ps(c7_old, c7));
+        } else {
+            _mm256_storeu_ps(c, c0);
+            _mm256_storeu_ps(c.add(ldc), c1);
+            _mm256_storeu_ps(c.add(2 * ldc), c2);
+            _mm256_storeu_ps(c.add(3 * ldc), c3);
+            _mm256_storeu_ps(c.add(4 * ldc), c4);
+            _mm256_storeu_ps(c.add(5 * ldc), c5);
+            _mm256_storeu_ps(c.add(6 * ldc), c6);
+            _mm256_storeu_ps(c.add(7 * ldc), c7);
+        }
     }
 }
 
@@ -141,29 +143,36 @@ pub fn sgemm_bias_parallel(
 
     if m * n * k < 32 * 32 * 32 {
         for i in 0..m {
-            let bias_val = bias.map(|b| b[i]).unwrap_or(0.0);
+            let bias_val = bias.map(|bb| bb[i]).unwrap_or(0.0);
             for j in 0..n {
                 let mut sum = 0.0f32;
                 for p in 0..k {
                     sum += a[i * k + p] * b[p * n + j];
                 }
-                match use_silu {
-                    true => {
-                        c[i * n + j] = silu(sum + bias_val);
-                    }
-                    false => {
-                        c[i * n + j] = sum + bias_val;
-                    }
-                }
+                c[i * n + j] = if use_silu {
+                    silu(sum + bias_val)
+                } else {
+                    sum + bias_val
+                };
             }
         }
         return;
     }
 
-    gemm_bias_blocked(m, n, k, a, b, bias, c, use_silu);
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
+            unsafe {
+                gemm_bias_blocked_avx2(m, n, k, a, b, bias, c, use_silu);
+            }
+            return;
+        }
+    }
+
+    gemm_bias_blocked_scalar(m, n, k, a, b, bias, c, use_silu);
 }
 
-fn gemm_bias_blocked(
+fn gemm_bias_blocked_scalar(
     m: usize,
     n: usize,
     k: usize,
@@ -176,42 +185,130 @@ fn gemm_bias_blocked(
     let lda = k;
     let ldb = n;
     let ldc = n;
+    let mt = (m + MC - 1) / MC;
+    let nt = (n + NC - 1) / NC;
 
-    c.iter_mut().for_each(|x| *x = 0.0);
+    let a_base = a.as_ptr() as usize;
+    let b_base = b.as_ptr() as usize;
+    let c_base = c.as_mut_ptr() as usize;
 
-    let m_tiles: Vec<usize> = (0..m).step_by(MC).collect();
+    (0..mt * nt).into_par_iter().for_each(|t| {
+        let a_ptr_base = a_base as *const f32;
+        let b_ptr_base = b_base as *const f32;
+        let c_ptr_base = c_base as *mut f32;
 
-    m_tiles.into_par_iter().for_each(|i0| {
+        let i0 = (t / nt) * MC;
+        let j0 = (t % nt) * NC;
+
         let mc = (m - i0).min(MC);
+        let nc = (n - j0).min(NC);
 
-        for j0 in (0..n).step_by(NC) {
-            let nc = (n - j0).min(NC);
+        for p0 in (0..k).step_by(KC) {
+            let kc = (k - p0).min(KC);
+            let accumulate = p0 != 0;
 
-            for p0 in (0..k).step_by(KC) {
-                let kc = (k - p0).min(KC);
+            for i in (0..mc).step_by(MR) {
+                let mr = (mc - i).min(MR);
 
-                for i in (0..mc).step_by(MR) {
-                    let mr = (mc - i).min(MR);
+                for j in (0..nc).step_by(NR) {
+                    let nr = (nc - j).min(NR);
 
-                    for j in (0..nc).step_by(NR) {
-                        let nr = (nc - j).min(NR);
+                    unsafe {
+                        let a_ptr = a_ptr_base.add((i0 + i) * lda + p0);
+                        let b_ptr = b_ptr_base.add(p0 * ldb + (j0 + j));
+                        let c_ptr = c_ptr_base.add((i0 + i) * ldc + (j0 + j));
 
-                        let a_ptr = &a[(i0 + i) * lda + p0..];
-                        let b_ptr = &b[p0 * ldb + (j0 + j)..];
+                        micro_kernel_scalar(
+                            mr, nr, kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
+                        );
+                    }
+                }
+            }
+        }
+    });
 
-                        unsafe {
-                            let c_ptr = c.as_ptr().add((i0 + i) * ldc + (j0 + j)) as *mut f32;
-                            micro_kernel_accum(
-                                mr,
-                                nr,
-                                kc,
-                                1.0,
-                                a_ptr.as_ptr(),
-                                lda,
-                                b_ptr.as_ptr(),
-                                ldb,
-                                c_ptr,
-                                ldc,
+    match use_silu {
+        true => match bias {
+            Some(bb) => {
+                c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
+                    let bias_val = bb[i];
+                    row.iter_mut().for_each(|v| *v = silu(*v + bias_val));
+                });
+            }
+            None => {
+                c.par_iter_mut().for_each(|v| *v = silu(*v));
+            }
+        },
+        false => {
+            if let Some(bb) = bias {
+                c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
+                    let bias_val = bb[i];
+                    row.iter_mut().for_each(|v| *v += bias_val);
+                });
+            }
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+unsafe fn gemm_bias_blocked_avx2(
+    m: usize,
+    n: usize,
+    k: usize,
+    a: &[f32],
+    b: &[f32],
+    bias: Option<&[f32]>,
+    c: &mut [f32],
+    use_silu: bool,
+) {
+    if let Some(bb) = bias {
+        debug_assert_eq!(bb.len(), m);
+    }
+
+    let lda = k;
+    let ldb = n;
+    let ldc = n;
+
+    let a_base = a.as_ptr() as usize;
+    let b_base = b.as_ptr() as usize;
+    let c_base = c.as_mut_ptr() as usize;
+
+    let mt = (m + MC - 1) / MC;
+    let nt = (n + NC - 1) / NC;
+
+    (0..mt * nt).into_par_iter().for_each(|t| {
+        let a_ptr_base = a_base as *const f32;
+        let b_ptr_base = b_base as *const f32;
+        let c_ptr_base = c_base as *mut f32;
+
+        let i0 = (t / nt) * MC;
+        let j0 = (t % nt) * NC;
+
+        let mc = (m - i0).min(MC);
+        let nc = (n - j0).min(NC);
+
+        for p0 in (0..k).step_by(KC) {
+            let kc = (k - p0).min(KC);
+            let accumulate = p0 != 0;
+
+            for i in (0..mc).step_by(MR) {
+                let mr = (mc - i).min(MR);
+
+                for j in (0..nc).step_by(NR) {
+                    let nr = (nc - j).min(NR);
+
+                    unsafe {
+                        let a_ptr = a_ptr_base.add((i0 + i) * lda + p0);
+                        let b_ptr = b_ptr_base.add(p0 * ldb + (j0 + j));
+                        let c_ptr = c_ptr_base.add((i0 + i) * ldc + (j0 + j));
+
+                        if mr == MR && nr == NR {
+                            micro_kernel_8x8_avx2(
+                                kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
+                            );
+                        } else {
+                            micro_kernel_scalar(
+                                mr, nr, kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
                             );
                         }
                     }
@@ -222,10 +319,10 @@ fn gemm_bias_blocked(
 
     match use_silu {
         true => match bias {
-            Some(b) => {
+            Some(bb) => {
                 c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
-                    let bias_val = b[i];
-                    row.iter_mut().for_each(|v| *v = silu(*v + bias_val));
+                    let bias_val = bb[i];
+                    row.into_par_iter().for_each(|v| *v = silu(*v + bias_val));
                 });
             }
             None => {
@@ -233,9 +330,9 @@ fn gemm_bias_blocked(
             }
         },
         false => {
-            if let Some(b) = bias {
+            if let Some(bb) = bias {
                 c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
-                    let bias_val = b[i];
+                    let bias_val = bb[i];
                     row.iter_mut().for_each(|v| *v += bias_val);
                 });
             }

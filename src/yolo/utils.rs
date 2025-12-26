@@ -125,6 +125,27 @@ fn im2col_3x3_s2p1(
         });
 }
 
+thread_local! {
+    static IM2COL_BUF_POOL: std::cell::RefCell<Vec<Vec<f32>>> = std::cell::RefCell::new(Vec::new());
+}
+
+#[inline(always)]
+fn run_func_with_f32_buffer<R>(buf_size: usize, f: impl FnOnce(&mut [f32]) -> R) -> R {
+    IM2COL_BUF_POOL.with(|cell| {
+        let mut buf = cell.borrow_mut().pop().unwrap_or_default();
+
+        if buf.len() < buf_size {
+            buf.resize(buf_size, 0.0f32);
+        }
+
+        let a = f(&mut buf[..buf_size]);
+
+        cell.borrow_mut().push(buf);
+
+        a
+    })
+}
+
 pub fn conv_silu_into(
     x: &Array4<f32>,
     w: &Array4<f32>,
@@ -155,58 +176,58 @@ pub fn conv_silu_into(
     let out_sl = out.as_slice_memory_order_mut().unwrap();
 
     let col_size = cin * 9 * hw_out;
-    let mut col_buffer = vec![0.0f32; col_size];
+    run_func_with_f32_buffer(col_size, |col_buffer| {
+        if cfg.stride == 1 && cfg.pad == 1 {
+            im2col_3x3_s1p1(xs, hin, win, col_buffer);
+        } else if cfg.stride == 2 && cfg.pad == 1 {
+            im2col_3x3_s2p1(xs, hin, win, hout, wout, col_buffer);
+        }
 
-    if cfg.stride == 1 && cfg.pad == 1 {
-        im2col_3x3_s1p1(xs, hin, win, &mut col_buffer);
-    } else if cfg.stride == 2 && cfg.pad == 1 {
-        im2col_3x3_s2p1(xs, hin, win, hout, wout, &mut col_buffer);
-    }
+        let k_dim = cin * 9;
+        let bias = conv_bias.map(|b| b.as_slice().unwrap());
 
-    let k_dim = cin * 9;
-    let bias = conv_bias.map(|b| b.as_slice().unwrap());
+        if FFI {
+            let m = cout;
+            let n = hw_out;
+            let k = cin * 9;
 
-    if FFI {
-        let m = cout;
-        let n = hw_out;
-        let k = cin * 9;
+            if let Some(b) = conv_bias {
+                out_sl
+                    .par_chunks_mut(n)
+                    .enumerate()
+                    .for_each(|(oc, row)| row.fill(b[oc]));
+            } else {
+                out_sl.fill(0.0);
+            }
 
-        if let Some(b) = conv_bias {
-            out_sl
-                .par_chunks_mut(n)
-                .enumerate()
-                .for_each(|(oc, row)| row.fill(b[oc]));
+            unsafe {
+                gemm::gemm::<f32>(
+                    m,
+                    n,
+                    k,
+                    out_sl.as_mut_ptr(),
+                    1,
+                    n as isize,
+                    true,
+                    ws.as_ptr(),
+                    1,
+                    k as isize,
+                    col_buffer.as_ptr(),
+                    1,
+                    n as isize,
+                    1.0,
+                    1.0,
+                    false,
+                    false,
+                    false,
+                    Parallelism::Rayon(0),
+                );
+            }
+            out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
         } else {
-            out_sl.fill(0.0);
+            sgemm_bias_parallel(cout, hw_out, k_dim, ws, col_buffer, bias, out_sl, true);
         }
-
-        unsafe {
-            gemm::gemm::<f32>(
-                m,
-                n,
-                k,
-                out_sl.as_mut_ptr(),
-                1,
-                n as isize,
-                true,
-                ws.as_ptr(),
-                1,
-                k as isize,
-                col_buffer.as_ptr(),
-                1,
-                n as isize,
-                1.0,
-                1.0,
-                false,
-                false,
-                false,
-                Parallelism::Rayon(0),
-            );
-        }
-        out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
-    } else {
-        sgemm_bias_parallel(cout, hw_out, k_dim, ws, &col_buffer, bias, out_sl, true);
-    }
+    });
 
     Ok(())
 }
@@ -225,20 +246,22 @@ pub fn conv1x1_silu_into_blocks(
     let out_sl = out.as_slice_memory_order_mut().unwrap();
 
     let total_channels: usize = blocks.iter().map(|(_, k)| *k).sum();
-    let mut concat_input = vec![0.0f32; total_channels * hw];
 
-    let mut offset = 0;
-    for (block_data, k) in blocks.iter() {
-        if *k > 0 {
-            let block_size = *k * hw;
-            concat_input[offset..offset + block_size].copy_from_slice(&block_data[..block_size]);
-            offset += block_size;
+    run_func_with_f32_buffer(total_channels * hw, |concat_input| {
+        let mut offset = 0;
+        for (block_data, k) in blocks.iter() {
+            if *k > 0 {
+                let block_size = *k * hw;
+                concat_input[offset..offset + block_size]
+                    .copy_from_slice(&block_data[..block_size]);
+                offset += block_size;
+            }
         }
-    }
 
-    let bias_slice = bias.map(|b| b.as_slice().unwrap());
+        let bias_slice = bias.map(|b| b.as_slice().unwrap());
 
-    sgemm_bias_parallel(cout, hw, cin, wsl, &concat_input, bias_slice, out_sl, true);
+        sgemm_bias_parallel(cout, hw, cin, wsl, concat_input, bias_slice, out_sl, true);
+    });
 
     Ok(())
 }
