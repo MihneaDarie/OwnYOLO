@@ -5,6 +5,15 @@ edition = "2024"
 
 [dependencies]
 anyhow = "1.0.100"
-ndarray = "0.17.1"
+ndarray = { version = "0.17.1", features = ["rayon"] }
+rayon = "1.10"
+rand = "0.8"
 ndarray-npy = "0.10.0"
 opencv = "0.97.2"
+gemm = { version = "0.19.0" }
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
