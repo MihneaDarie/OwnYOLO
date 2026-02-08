@@ -748,39 +748,44 @@ impl YoloV8 {
         iou_threshold: f32,
     ) -> Vec<Detection> {
         let (_, _, num_anchors) = output.dim();
-        let out_slice = output.as_slice_memory_order().unwrap();
+        let out = output.as_slice_memory_order().unwrap();
 
-        let detections: Vec<Detection> = (0..num_anchors)
-            .into_par_iter()
-            .filter_map(|a| {
-                let mut best_class = 0;
-                let mut best_score = 0.0f32;
-                for c in 0..80 {
-                    let score = out_slice[(4 + c) * num_anchors + a];
-                    if score > best_score {
-                        best_score = score;
-                        best_class = c;
-                    }
+        let mut candidates: Vec<Detection> = Vec::new();
+        candidates.reserve(1024);
+
+        for a in 0..num_anchors {
+            let mut best_class = 0usize;
+            let mut best_score = 0.0f32;
+
+            for c in 0..80 {
+                let score = out[(4 + c) * num_anchors + a];
+                if score > best_score {
+                    best_score = score;
+                    best_class = c;
                 }
+            }
 
-                if best_score >= conf_threshold {
-                    Some(Detection {
-                        bbox: [
-                            out_slice[0 * num_anchors + a],
-                            out_slice[1 * num_anchors + a],
-                            out_slice[2 * num_anchors + a],
-                            out_slice[3 * num_anchors + a],
-                        ],
-                        confidence: best_score,
-                        class_id: best_class,
-                    })
-                } else {
-                    None
-                }
-            })
-            .collect();
+            if best_score >= conf_threshold {
+                candidates.push(Detection {
+                    bbox: [
+                        out[0 * num_anchors + a],
+                        out[1 * num_anchors + a],
+                        out[2 * num_anchors + a],
+                        out[3 * num_anchors + a],
+                    ],
+                    confidence: best_score,
+                    class_id: best_class,
+                });
+            }
+        }
 
-        nms(&mut detections.into_iter().collect(), iou_threshold)
+        candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+        let top_k = 300;
+        if candidates.len() > top_k {
+            candidates.truncate(top_k);
+        }
+
+        nms(&mut candidates, iou_threshold)
     }
 }
 
