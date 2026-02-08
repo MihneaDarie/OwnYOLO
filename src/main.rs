@@ -1,5 +1,5 @@
 mod yolo;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use ndarray::{Array, Array4};
@@ -21,64 +21,98 @@ const COLORS: [VecN<f64, 4>; 8] = [
     Scalar::new(255.0, 128.0, 0.0, 0.0),
 ];
 
-fn preprocess_image(frame: &Mat) -> Result<Array4<f32>> {
+fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
+    let in_w = frame.cols() as f32;
+    let in_h = frame.rows() as f32;
+
+    let new_size = 640.0f32;
+    let scale = (new_size / in_w).min(new_size / in_h);
+
+    let resized_w = (in_w * scale).round() as i32;
+    let resized_h = (in_h * scale).round() as i32;
+
     let mut resized = Mat::default();
-    opencv::imgproc::resize(
+    imgproc::resize(
         frame,
         &mut resized,
-        Size::new(640, 640),
+        Size::new(resized_w, resized_h),
         0.0,
         0.0,
         imgproc::INTER_LINEAR,
     )?;
 
+    let pad_w = 640 - resized_w;
+    let pad_h = 640 - resized_h;
+
+    let pad_left = pad_w / 2;
+    let pad_right = pad_w - pad_left;
+    let pad_top = pad_h / 2;
+    let pad_bottom = pad_h - pad_top;
+
+    let mut padded = Mat::default();
+    copy_make_border(
+        &resized,
+        &mut padded,
+        pad_top,
+        pad_bottom,
+        pad_left,
+        pad_right,
+        BORDER_CONSTANT,
+        Scalar::new(114.0, 114.0, 114.0, 0.0),
+    )?;
+
     let mut rgb = Mat::default();
-    imgproc::cvt_color(&resized, &mut rgb, imgproc::COLOR_BGR2RGB, 0)?;
+    imgproc::cvt_color(&padded, &mut rgb, imgproc::COLOR_BGR2RGB, 0)?;
 
     let mut normalized = Mat::default();
-    rgb.convert_to(&mut normalized, opencv::core::CV_32F, 1.0 / 255.0, 0.0)?;
+    rgb.convert_to(&mut normalized, CV_32F, 1.0 / 255.0, 0.0)?;
 
-    let rows = normalized.rows();
-    let cols = normalized.cols();
-    let channels = normalized.channels();
+    let rows = normalized.rows() as usize;
+    let cols = normalized.cols() as usize;
+    let channels = normalized.channels() as usize;
 
     let data = normalized.data_bytes()?;
     let float_data: Vec<f32> = data
         .chunks_exact(4)
-        .map(|chunk| f32::from_le_bytes([chunk[0], chunk[1], chunk[2], chunk[3]]))
+        .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
         .collect();
 
-    let mut chw_data = vec![0.0f32; channels as usize * rows as usize * cols as usize];
-    for h in 0..rows as usize {
-        for w in 0..cols as usize {
-            for c in 0..channels as usize {
-                let hwc_idx = (h * cols as usize + w) * channels as usize + c;
-                let chw_idx = c * (rows as usize * cols as usize) + h * cols as usize + w;
-                chw_data[chw_idx] = float_data[hwc_idx];
+    let mut chw = vec![0.0f32; channels * rows * cols];
+    for h in 0..rows {
+        for w in 0..cols {
+            let base = (h * cols + w) * channels;
+            for c in 0..channels {
+                chw[c * rows * cols + h * cols + w] = float_data[base + c];
             }
         }
     }
 
-    let array = Array::from_shape_vec(
-        (1, channels as usize, rows as usize, cols as usize),
-        chw_data,
-    )?;
-    Ok(array)
+    let input = Array::from_shape_vec((1, channels, rows, cols), chw)?;
+
+    Ok((input, scale, pad_left as f32, pad_top as f32))
 }
 
 fn draw_detections(
     frame: &mut Mat,
     detections: &[Detection],
-    scale_x: f32,
-    scale_y: f32,
+    scale: f32,
+    pad_x: f32,
+    pad_y: f32,
 ) -> Result<()> {
+    let fw = frame.cols() as f32;
+    let fh = frame.rows() as f32;
+
     for det in detections {
         let color = COLORS[det.class_id % COLORS.len()];
 
-        let x1 = (det.bbox[0] * scale_x) as i32;
-        let y1 = (det.bbox[1] * scale_y) as i32;
-        let x2 = (det.bbox[2] * scale_x) as i32;
-        let y2 = (det.bbox[3] * scale_y) as i32;
+        let x1 = ((det.bbox[0] - pad_x) / scale).clamp(0.0, fw - 1.0) as i32;
+        let y1 = ((det.bbox[1] - pad_y) / scale).clamp(0.0, fh - 1.0) as i32;
+        let x2 = ((det.bbox[2] - pad_x) / scale).clamp(0.0, fw - 1.0) as i32;
+        let y2 = ((det.bbox[3] - pad_y) / scale).clamp(0.0, fh - 1.0) as i32;
+
+        if x2 <= x1 || y2 <= y1 {
+            continue;
+        }
 
         imgproc::rectangle(
             frame,
@@ -90,41 +124,14 @@ fn draw_detections(
         )?;
 
         let label = format!("{}: {:.2}", COCO_CLASSES[det.class_id], det.confidence);
-        let font_scale = 0.5;
-        let thickness = 1;
-        let mut baseline = 0;
-        let text_size = imgproc::get_text_size(
-            &label,
-            imgproc::FONT_HERSHEY_SIMPLEX,
-            font_scale,
-            thickness,
-            &mut baseline,
-        )?;
-
-        let label_y = (y1 - 5).max(text_size.height + 5);
-
-        imgproc::rectangle(
-            frame,
-            Rect::new(
-                x1,
-                label_y - text_size.height - 5,
-                text_size.width + 10,
-                text_size.height + 10,
-            ),
-            color,
-            -1,
-            imgproc::LINE_8,
-            0,
-        )?;
-
         imgproc::put_text(
             frame,
             &label,
-            Point::new(x1 + 5, label_y),
+            Point::new(x1, (y1 - 5).max(15)),
             imgproc::FONT_HERSHEY_SIMPLEX,
-            font_scale,
+            0.5,
             Scalar::new(255.0, 255.0, 255.0, 0.0),
-            thickness,
+            1,
             imgproc::LINE_8,
             false,
         )?;
@@ -159,7 +166,7 @@ fn main() -> Result<()> {
     println!("Model loaded!");
 
     let conf_threshold = 0.25;
-    let iou_threshold = 0.45;
+    let iou_threshold = 0.35;
 
     let mut frame_count = 0;
     let mut total_inference_time = 0.0;
@@ -175,12 +182,7 @@ fn main() -> Result<()> {
             break;
         }
 
-        let frame_width = frame.cols() as f32;
-        let frame_height = frame.rows() as f32;
-        let scale_x = frame_width / 640.0;
-        let scale_y = frame_height / 640.0;
-
-        let input = preprocess_image(&frame)?;
+        let (input, scale, pad_x, pad_y) = preprocess_image(&frame)?;
 
         let start_inference = Instant::now();
         model.forward(&input, &mut buffers)?;
@@ -193,7 +195,7 @@ fn main() -> Result<()> {
             iou_threshold,
         );
 
-        draw_detections(&mut frame, &detections, scale_x, scale_y)?;
+        draw_detections(&mut frame, &detections, scale, pad_x, pad_y)?;
 
         let avg_inference_time = total_inference_time / frame_count as f32;
         let fps = 1.0 / avg_inference_time;
