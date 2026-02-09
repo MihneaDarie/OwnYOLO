@@ -18,14 +18,7 @@ pub fn sigmoid(x: f32) -> f32 {
 
 #[inline(always)]
 pub fn silu(x: f32) -> f32 {
-    if x < -4.0 {
-        0.0
-    } else if x > 4.0 {
-        x
-    } else {
-        let a = 0.25;
-        x * (0.5 + a * x - a * x.abs() * x / 8.0)
-    }
+    x / (1.0 + (-x).exp())
 }
 
 #[inline(always)]

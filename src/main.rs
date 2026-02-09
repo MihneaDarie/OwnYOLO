@@ -161,7 +161,7 @@ fn main() -> Result<()> {
     highgui::named_window(window_name, highgui::WINDOW_AUTOSIZE)?;
 
     println!("Loading YOLOv8 model...");
-    let model = YoloV8::new("data/yolo_weights.npz")?;
+    let model = YoloV8::new("data/yolo_weights_fused.npz")?;
     let mut buffers = Buffers::new();
     println!("Model loaded!");
 
