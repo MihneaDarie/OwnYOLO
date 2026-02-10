@@ -18,7 +18,14 @@ pub fn sigmoid(x: f32) -> f32 {
 
 #[inline(always)]
 pub fn silu(x: f32) -> f32 {
-    x / (1.0 + (-x).exp())
+    if x < -4.0 {
+        0.0
+    } else if x > 4.0 {
+        x
+    } else {
+        let a = 0.25;
+        x * (0.5 + a * x - a * x.abs() * x / 8.0)
+    }
 }
 
 #[inline(always)]
@@ -266,7 +273,12 @@ pub fn conv1x1_silu_into_blocks(
     Ok(())
 }
 
-pub fn c2f_into(x: &Array4<f32>, w: &C2fWeights, buf: &mut C2FBuffer) -> Result<()> {
+pub fn c2f_into(
+    x: &Array4<f32>,
+    w: &C2fWeights,
+    buf: &mut C2FBuffer,
+    shortcut: bool,
+) -> Result<()> {
     conv_silu_into(
         x,
         &w.cv1.conv_weight,
@@ -290,12 +302,11 @@ pub fn c2f_into(x: &Array4<f32>, w: &C2fWeights, buf: &mut C2FBuffer) -> Result<
 
     let nb = w.bottlenecks.len();
     for i in 0..nb {
-        let prev_in = &buf.split_1;
         let bbuf = &mut buf.bottlenecks[i];
         let bw = &w.bottlenecks[i];
 
         conv_silu_into(
-            prev_in,
+            &buf.split_1,
             &bw.cv1.conv_weight,
             bw.cv1.conv_bias.as_ref(),
             &CFG_3X3_S1_P1,
@@ -310,14 +321,16 @@ pub fn c2f_into(x: &Array4<f32>, w: &C2fWeights, buf: &mut C2FBuffer) -> Result<
             &mut bbuf.cv2_out,
         )?;
 
-        let src = prev_in.as_slice_memory_order().unwrap();
-        let dst = bbuf.cv2_out.as_slice_memory_order_mut().unwrap();
-        add_inplace(dst, src);
+        if shortcut {
+            let src = buf.split_1.as_slice_memory_order().unwrap().to_vec();
+            let dst = bbuf.cv2_out.as_slice_memory_order_mut().unwrap();
+            add_inplace(dst, &src);
+        }
 
         buf.split_1
             .as_slice_memory_order_mut()
             .unwrap()
-            .copy_from_slice(buf.bottlenecks[i].cv2_out.as_slice_memory_order().unwrap());
+            .copy_from_slice(bbuf.cv2_out.as_slice_memory_order().unwrap());
     }
 
     let empty: &[f32] = &[];

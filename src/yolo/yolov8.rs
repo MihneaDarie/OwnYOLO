@@ -327,6 +327,7 @@ impl YoloV8 {
             &buffers.model_1_buffer.conv_out,
             &self.weights.model_2,
             &mut buffers.model_2_buffer,
+            true,
         )?;
 
         conv_silu_into(
@@ -341,6 +342,7 @@ impl YoloV8 {
             &buffers.model_3_buffer.conv_out,
             &self.weights.model_4,
             &mut buffers.model_4_buffer,
+            true,
         )?;
 
         conv_silu_into(
@@ -355,6 +357,7 @@ impl YoloV8 {
             &buffers.model_5_buffer.conv_out,
             &self.weights.model_6,
             &mut buffers.model_6_buffer,
+            true,
         )?;
 
         conv_silu_into(
@@ -369,6 +372,7 @@ impl YoloV8 {
             &buffers.model_7_buffer.conv_out,
             &self.weights.model_8,
             &mut buffers.model_8_buffer,
+            true,
         )?;
 
         self.sppf_into(
@@ -393,6 +397,7 @@ impl YoloV8 {
             &buffers.concat1_buffer.output,
             &self.weights.model_12,
             &mut buffers.model_12_buffer,
+            false,
         )?;
 
         upsample_2x(
@@ -410,6 +415,7 @@ impl YoloV8 {
             &buffers.concat2_buffer.output,
             &self.weights.model_15,
             &mut buffers.model_15_buffer,
+            false,
         )?;
 
         conv_silu_into(
@@ -428,6 +434,7 @@ impl YoloV8 {
             &buffers.concat3_buffer.output,
             &self.weights.model_18,
             &mut buffers.model_18_buffer,
+            false,
         )?;
 
         conv_silu_into(
@@ -448,6 +455,7 @@ impl YoloV8 {
             &buffers.concat4_buffer.output,
             &self.weights.model_21,
             &mut buffers.model_21_buffer,
+            false,
         )?;
         let input0 = &buffers.model_15_buffer.last;
         let input1 = &buffers.model_18_buffer.last;
