@@ -1,6 +1,6 @@
 use crate::yolo::{
     buffers::*,
-    gemm::sgemm_bias_parallel,
+    gemms::mm256_gemm::sgemm_bias_parallel,
     time::print_time,
     utils::{Conv2D, FFI, c2f_into, conv_silu_into, sigmoid},
 };
