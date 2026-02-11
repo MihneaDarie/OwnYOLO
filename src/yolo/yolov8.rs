@@ -1,7 +1,6 @@
 use crate::yolo::{
     buffers::*,
     gemms::gemm::sgemm_bias_parallel,
-    time::print_time,
     utils::{Conv2D, FFI, c2f_into, conv_silu_into, sigmoid},
 };
 use anyhow::Result;
@@ -14,7 +13,7 @@ use rayon::{
     join,
     slice::ParallelSliceMut,
 };
-use std::{cell::RefCell, fs::File, time::Instant};
+use std::{cell::RefCell, fs::File};
 
 pub const COCO_CLASSES: [&str; 80] = [
     "person",
@@ -269,7 +268,7 @@ pub const CONV_3X3_S1: Conv2D = Conv2D { pad: 1, stride: 1 };
 pub const CONV_1X1_S1: Conv2D = Conv2D { pad: 0, stride: 1 };
 
 thread_local! {
-    static POOL_TMP: RefCell<Vec<f32>> = RefCell::new(Vec::new());
+    static POOL_TMP: RefCell<Vec<f32>> = const {RefCell::new(Vec::new())};
 }
 
 #[inline(always)]
@@ -701,8 +700,7 @@ impl YoloV8 {
             let stride = unsafe { *strides.get_unchecked(a) };
 
             let mut d = [0f32; 4];
-
-            for coord in 0..4 {
+            for (coord, value) in d.iter_mut().enumerate() {
                 let base = (coord * 16) * num_anchors + a;
 
                 let mut maxv = f32::NEG_INFINITY;
@@ -722,7 +720,7 @@ impl YoloV8 {
                     wsum += e * (bin as f32);
                 }
 
-                d[coord] = wsum / sum;
+                *value = wsum / sum;
             }
 
             let left = d[0] * stride;
@@ -737,8 +735,8 @@ impl YoloV8 {
 
             let out_ptr = out_ptr_usize as *mut f32;
             unsafe {
-                *out_ptr.add(0 * num_anchors + a) = x1;
-                *out_ptr.add(1 * num_anchors + a) = y1;
+                *out_ptr.add(a) = x1;
+                *out_ptr.add(num_anchors + a) = y1;
                 *out_ptr.add(2 * num_anchors + a) = x2;
                 *out_ptr.add(3 * num_anchors + a) = y2;
             }
@@ -758,8 +756,7 @@ impl YoloV8 {
         let (_, _, num_anchors) = output.dim();
         let out = output.as_slice_memory_order().unwrap();
 
-        let mut candidates: Vec<Detection> = Vec::new();
-        candidates.reserve(1024);
+        let mut candidates: Vec<Detection> = Vec::with_capacity(1024);
 
         for a in 0..num_anchors {
             let mut best_class = 0usize;
@@ -776,8 +773,8 @@ impl YoloV8 {
             if best_score >= conf_threshold {
                 candidates.push(Detection {
                     bbox: [
-                        out[0 * num_anchors + a],
-                        out[1 * num_anchors + a],
+                        out[a],
+                        out[num_anchors + a],
                         out[2 * num_anchors + a],
                         out[3 * num_anchors + a],
                     ],
@@ -1005,7 +1002,7 @@ pub fn conv_linear_into(
     Ok(())
 }
 
-fn nms(detections: &mut Vec<Detection>, iou_threshold: f32) -> Vec<Detection> {
+fn nms(detections: &mut [Detection], iou_threshold: f32) -> Vec<Detection> {
     detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
 
     let mut keep = Vec::new();
@@ -1016,7 +1013,7 @@ fn nms(detections: &mut Vec<Detection>, iou_threshold: f32) -> Vec<Detection> {
             continue;
         }
 
-        keep.push(detections[i].clone());
+        keep.push(detections[i]);
 
         for j in (i + 1)..detections.len() {
             if suppressed[j] {

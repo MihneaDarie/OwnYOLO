@@ -80,8 +80,8 @@ unsafe fn micro_kernel_16x16_avx_512(
         for p in 0..k {
             let b = _mm512_loadu_ps(b.add(p * ldb));
 
-            let a0 = _mm512_set1_ps(*a.add(0 * lda + p));
-            let a1 = _mm512_set1_ps(*a.add(1 * lda + p));
+            let a0 = _mm512_set1_ps(*a.add(p));
+            let a1 = _mm512_set1_ps(*a.add(lda + p));
             let a2 = _mm512_set1_ps(*a.add(2 * lda + p));
             let a3 = _mm512_set1_ps(*a.add(3 * lda + p));
             let a4 = _mm512_set1_ps(*a.add(4 * lda + p));
@@ -241,8 +241,8 @@ pub fn gemm_bias_blocked_scalar(
     let lda = k;
     let ldb = n;
     let ldc = n;
-    let mt = (m + MC - 1) / MC;
-    let nt = (n + NC - 1) / NC;
+    let mt = m.div_ceil(MC);
+    let nt = n.div_ceil(NC);
 
     let a_base = a.as_ptr() as usize;
     let b_base = b.as_ptr() as usize;
@@ -328,8 +328,8 @@ pub unsafe fn gemm_bias_blocked_avx512(
     let b_base = b.as_ptr() as usize;
     let c_base = c.as_mut_ptr() as usize;
 
-    let mt = (m + MC - 1) / MC;
-    let nt = (n + NC - 1) / NC;
+    let mt = m.div_ceil(MC);
+    let nt = n.div_ceil(NC);
 
     (0..mt * nt).into_par_iter().for_each(|t| {
         let a_ptr_base = a_base as *const f32;

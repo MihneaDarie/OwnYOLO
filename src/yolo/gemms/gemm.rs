@@ -1,5 +1,5 @@
-use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu};
 use crate::yolo::gemms::mm256_gemm::gemm_bias_blocked_avx2;
+use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu};
 
 pub fn sgemm_bias_parallel(
     m: usize,

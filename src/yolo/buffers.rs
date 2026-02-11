@@ -83,7 +83,6 @@ pub struct Buffers {
 
     pub model_21_buffer: C2FBuffer,
     pub model_22_buffer: DetectHeadBuffer,
-    
 }
 
 impl Buffers {
@@ -262,6 +261,6 @@ impl Buffers {
                 class_pred: Array3::zeros((1, 80, 8400)),
                 final_output: Array3::zeros((1, 84, 8400)),
             },
-                    }
+        }
     }
 }

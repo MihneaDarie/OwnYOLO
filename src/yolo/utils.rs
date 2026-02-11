@@ -133,7 +133,7 @@ fn im2col_3x3_s2p1(
 }
 
 thread_local! {
-    static IM2COL_BUF_POOL: std::cell::RefCell<Vec<Vec<f32>>> = std::cell::RefCell::new(Vec::new());
+    static IM2COL_BUF_POOL: std::cell::RefCell<Vec<Vec<f32>>> = const {std::cell::RefCell::new(Vec::new())};
 }
 
 #[inline(always)]

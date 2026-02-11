@@ -26,24 +26,24 @@ unsafe fn micro_kernel_8x8_scalar(
 
     unsafe {
         for p in 0..k {
-            for i in 0..mr {
+            for (i, rows) in acc.iter_mut().enumerate().take(mr) {
                 let a_val = *a.add(i * lda + p);
-                for j in 0..nr {
-                    acc[i][j] += a_val * *b.add(p * ldb + j);
+                for (j, val) in rows.iter_mut().enumerate().take(nr) {
+                    *val += a_val * *b.add(p * ldb + j);
                 }
             }
         }
 
         if accumulate {
-            for i in 0..mr {
-                for j in 0..nr {
-                    *c.add(i * ldc + j) += acc[i][j];
+            for (i, rows) in acc.iter().enumerate().take(mr) {
+                for (j, value) in rows.iter().enumerate().take(nr) {
+                    *c.add(i * ldc + j) += *value;
                 }
             }
         } else {
-            for i in 0..mr {
-                for j in 0..nr {
-                    *c.add(i * ldc + j) = acc[i][j];
+            for (i, rows) in acc.iter().enumerate().take(mr) {
+                for (j, value) in rows.iter().enumerate().take(nr) {
+                    *c.add(i * ldc + j) = *value;
                 }
             }
         }
@@ -75,8 +75,8 @@ unsafe fn micro_kernel_8x8_avx2(
         for p in 0..k {
             let b_row = _mm256_loadu_ps(b.add(p * ldb));
 
-            let a0 = _mm256_broadcast_ss(&*a.add(0 * lda + p));
-            let a1 = _mm256_broadcast_ss(&*a.add(1 * lda + p));
+            let a0 = _mm256_broadcast_ss(&*a.add(p));
+            let a1 = _mm256_broadcast_ss(&*a.add(lda + p));
             let a2 = _mm256_broadcast_ss(&*a.add(2 * lda + p));
             let a3 = _mm256_broadcast_ss(&*a.add(3 * lda + p));
             let a4 = _mm256_broadcast_ss(&*a.add(4 * lda + p));
@@ -207,8 +207,8 @@ pub unsafe fn gemm_bias_blocked_avx2(
     let b_base = b.as_ptr() as usize;
     let c_base = c.as_mut_ptr() as usize;
 
-    let mt = (m + MC - 1) / MC;
-    let nt = (n + NC - 1) / NC;
+    let mt = m.div_ceil(MC);
+    let nt = n.div_ceil(NC);
 
     (0..mt * nt).into_par_iter().for_each(|t| {
         let a_ptr_base = a_base as *const f32;

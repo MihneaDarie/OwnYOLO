@@ -1,5 +1,5 @@
 mod yolo;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Result;
 use ndarray::{Array, Array4};
