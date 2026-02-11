@@ -3,8 +3,6 @@ use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-use crate::yolo::utils::silu;
-
 const MC: usize = 64;
 const KC: usize = 256;
 const NC: usize = 256;
@@ -12,7 +10,7 @@ const MR: usize = 8;
 const NR: usize = 8;
 
 #[inline(always)]
-unsafe fn micro_kernel_scalar(
+unsafe fn micro_kernel_8x8_scalar(
     mr: usize,
     nr: usize,
     k: usize,
@@ -142,7 +140,7 @@ unsafe fn apply_silu_and_bias_avx2(c: *mut f32, n: usize, bias: f32) {
 
 #[cfg(target_arch = "x86_64")]
 #[target_feature(enable = "avx2,fma")]
-pub fn silu_avx2(x: __m256) -> __m256 {
+fn silu_avx2(x: __m256) -> __m256 {
     let left_margin = _mm256_set1_ps(-4.0);
     let right_margin = _mm256_set1_ps(4.0);
     let zeros = _mm256_setzero_ps();
@@ -186,131 +184,8 @@ unsafe fn apply_bias_avx2(c: *mut f32, n: usize, bias: f32) {
     }
 }
 
-pub fn sgemm_bias_parallel(
-    m: usize,
-    n: usize,
-    k: usize,
-    a: &[f32],
-    b: &[f32],
-    bias: Option<&[f32]>,
-    c: &mut [f32],
-    use_silu: bool,
-) {
-    if m == 0 || n == 0 || k == 0 {
-        return;
-    }
-
-    if m * n * k < 32 * 32 * 32 {
-        for i in 0..m {
-            let bias_val = bias.map(|bb| bb[i]).unwrap_or(0.0);
-            for j in 0..n {
-                let mut sum = 0.0f32;
-                for p in 0..k {
-                    sum += a[i * k + p] * b[p * n + j];
-                }
-                c[i * n + j] = if use_silu {
-                    silu(sum + bias_val)
-                } else {
-                    sum + bias_val
-                };
-            }
-        }
-        return;
-    }
-
-    #[cfg(target_arch = "x86_64")]
-    {
-        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
-            unsafe {
-                gemm_bias_blocked_avx2(m, n, k, a, b, bias, c, use_silu);
-            }
-            return;
-        }
-    }
-
-    gemm_bias_blocked_scalar(m, n, k, a, b, bias, c, use_silu);
-}
-
-fn gemm_bias_blocked_scalar(
-    m: usize,
-    n: usize,
-    k: usize,
-    a: &[f32],
-    b: &[f32],
-    bias: Option<&[f32]>,
-    c: &mut [f32],
-    use_silu: bool,
-) {
-    let lda = k;
-    let ldb = n;
-    let ldc = n;
-    let mt = (m + MC - 1) / MC;
-    let nt = (n + NC - 1) / NC;
-
-    let a_base = a.as_ptr() as usize;
-    let b_base = b.as_ptr() as usize;
-    let c_base = c.as_mut_ptr() as usize;
-
-    (0..mt * nt).into_par_iter().for_each(|t| {
-        let a_ptr_base = a_base as *const f32;
-        let b_ptr_base = b_base as *const f32;
-        let c_ptr_base = c_base as *mut f32;
-
-        let i0 = (t / nt) * MC;
-        let j0 = (t % nt) * NC;
-
-        let mc = (m - i0).min(MC);
-        let nc = (n - j0).min(NC);
-
-        for p0 in (0..k).step_by(KC) {
-            let kc = (k - p0).min(KC);
-            let accumulate = p0 != 0;
-
-            for i in (0..mc).step_by(MR) {
-                let mr = (mc - i).min(MR);
-
-                for j in (0..nc).step_by(NR) {
-                    let nr = (nc - j).min(NR);
-
-                    unsafe {
-                        let a_ptr = a_ptr_base.add((i0 + i) * lda + p0);
-                        let b_ptr = b_ptr_base.add(p0 * ldb + (j0 + j));
-                        let c_ptr = c_ptr_base.add((i0 + i) * ldc + (j0 + j));
-
-                        micro_kernel_scalar(
-                            mr, nr, kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
-                        );
-                    }
-                }
-            }
-        }
-    });
-
-    match use_silu {
-        true => match bias {
-            Some(bb) => {
-                c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
-                    let bias_val = bb[i];
-                    row.iter_mut().for_each(|v| *v = silu(*v + bias_val));
-                });
-            }
-            None => {
-                c.par_iter_mut().for_each(|v| *v = silu(*v));
-            }
-        },
-        false => {
-            if let Some(bb) = bias {
-                c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
-                    let bias_val = bb[i];
-                    row.iter_mut().for_each(|v| *v += bias_val);
-                });
-            }
-        }
-    }
-}
-
 #[cfg(target_arch = "x86_64")]
-unsafe fn gemm_bias_blocked_avx2(
+pub unsafe fn gemm_bias_blocked_avx2(
     m: usize,
     n: usize,
     k: usize,
@@ -366,7 +241,7 @@ unsafe fn gemm_bias_blocked_avx2(
                                 kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
                             );
                         } else {
-                            micro_kernel_scalar(
+                            micro_kernel_8x8_scalar(
                                 mr, nr, kc, a_ptr, lda, b_ptr, ldb, c_ptr, ldc, accumulate,
                             );
                         }

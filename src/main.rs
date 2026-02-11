@@ -141,7 +141,7 @@ fn draw_detections(
 }
 
 fn main() -> Result<()> {
-    let camera_index = 0;
+    let camera_index = 1;
     rayon::ThreadPoolBuilder::new()
         .num_threads(12)
         .build_global()

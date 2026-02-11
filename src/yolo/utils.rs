@@ -4,7 +4,7 @@ use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array4};
 use rayon::prelude::*;
 
-use crate::yolo::gemms::mm256_gemm::sgemm_bias_parallel;
+use crate::yolo::gemms::gemm::sgemm_bias_parallel;
 
 use super::buffers::C2FBuffer;
 use super::yolov8::C2fWeights;
