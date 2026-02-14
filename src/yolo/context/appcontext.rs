@@ -81,6 +81,10 @@ impl AppContext {
                 flag));
             }
 
+            if args.contains(&String::from("cpu")) && (args.contains(&String::from("--type")) || args.contains(&String::from("-t"))) {
+                return Err("Can't set cpu specific features for gpu usage !".to_string());
+            }
+
             if !flag.starts_with('-') {
                 return Err(format!("Expected a flag, got: {}", flag));
             }
