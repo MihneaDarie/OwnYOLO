@@ -1,0 +1,139 @@
+use std::collections::HashSet;
+
+#[repr(u8)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Device {
+    #[default]
+    Cpu,
+    Gpu,
+}
+
+#[repr(u8)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum GemmType {
+    #[default]
+    Avx2,
+    Avx512,
+    Scalar,
+}
+
+#[derive(Default, Debug)]
+pub struct AppContext {
+    device: Device,
+    cam_index: u8,
+    gemm_type: GemmType,
+}
+
+impl AppContext {
+    fn new(device: Device, cam_index: u8, gemm_type: GemmType) -> Self {
+        Self {
+            device,
+            cam_index,
+            gemm_type,
+        }
+    }
+
+    pub fn get_device(&self) -> Device {
+        self.device
+    }
+
+    pub fn get_cam_index(&self) -> u8 {
+        self.cam_index
+    }
+
+    pub fn get_gemm_type(&self) -> GemmType {
+        self.gemm_type
+    }
+
+    pub fn parse_command_line_arguments(args: &Vec<String>) -> Result<Self, String> {
+        let mut context = AppContext::default();
+
+        if args.is_empty() {
+            return Ok(context);
+        }
+
+        if args.len() % 2 != 0 {
+            return Err("Odd number of arguments !".to_string());
+        }
+
+        let mut seen_flags = HashSet::new();
+        for i in (0..args.len()).step_by(2) {
+            if !seen_flags.insert(&args[i]) {
+                return Err(format!("Duplicate flag: {}", args[i]));
+            }
+        }
+
+        let valid_args: HashSet<&str> = ["--camera", "-c", "--device", "-d", "--type", "-t"]
+            .into_iter()
+            .collect();
+
+        for i in (0..args.len()).step_by(2) {
+            let flag = &args[i];
+            let value = &args[i + 1];
+
+            if !valid_args.contains(flag.as_str()) {
+                return Err(format!("Invalid argument {}
+                \n Valid arguments are: [--camera , -c, --device, -d, --type, -t]
+                \n|--camera, -c| -> select the camera from you computer you would like to use
+                \n|--device, -d| Select the device ypu wuold like the model to run on (CPU(default)/GPU)
+                \n|--type, -t| If the used device is the CPU you can choose what type of gemm you model is using",
+                flag));
+            }
+
+            if !flag.starts_with('-') {
+                return Err(format!("Expected a flag, got: {}", flag));
+            }
+
+            if value.starts_with('-') {
+                return Err(format!(
+                    "Expected a value after {}, got another flag: {}",
+                    flag, value,
+                ));
+            }
+
+            match flag.as_str() {
+                "--camera" | "-c" => {
+                    context.cam_index = value
+                        .parse::<u8>()
+                        .map_err(|_| format!("Invalid camera index: {}", value))?;
+                }
+                "--device" | "-d" => {
+                    context.device = match value.to_lowercase().as_str() {
+                        "cpu" => Device::Cpu,
+                        "gpu" => Device::Gpu,
+                        _ => {
+                            return Err(format!(
+                                "Unknown device type: {}. Use 'cpu' or 'gpu'.",
+                                value
+                            ));
+                        }
+                    };
+                }
+                "--type" | "-t" => {
+                    context.gemm_type = match value.to_lowercase().as_str() {
+                        "avx2" => GemmType::Avx2,
+                        "avx512" => GemmType::Avx512,
+                        "scalar" => GemmType::Scalar,
+                        _ => {
+                            return Err(format!(
+                                "Unknown GEMM type: {}. Use 'scalar', 'avx2', or 'avx512'.",
+                                value
+                            ));
+                        }
+                    };
+                }
+                _ => {}
+            }
+        }
+
+        Ok(context)
+    }
+
+    pub fn check_context_compatibility(&self) -> Result<(), String> {
+        if self.cam_index != 0 {
+            // vezi cum verifici camerele de pe pc
+        }
+
+        Ok(())
+    }
+}
