@@ -63,13 +63,15 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
     )?;
 
     let mut rgb = Mat::default();
-    imgproc::cvt_color(
-        &padded,
-        &mut rgb,
-        imgproc::COLOR_BGR2RGB,
-        0,
-        AlgorithmHint::ALGO_HINT_ACCURATE,
-    )?;
+    imgproc::cvt_color(&padded, &mut rgb, imgproc::COLOR_BGR2RGB, 0)?;
+
+    // imgproc::cvt_color(
+    //     &padded,
+    //     &mut rgb,
+    //     imgproc::COLOR_BGR2RGB,
+    //     0,
+    //     AlgorithmHint::ALGO_HINT_ACCURATE,
+    // )?;
 
     let mut normalized = Mat::default();
     rgb.convert_to(&mut normalized, CV_32F, 1.0 / 255.0, 0.0)?;
@@ -168,7 +170,7 @@ fn main() -> Result<()> {
         .num_threads(12)
         .build_global()
         .unwrap();
-    let mut camera = videoio::VideoCapture::new(context.get_cam_index() as i32, videoio::CAP_ANY)?;
+    let mut camera = videoio::VideoCapture::new(1, videoio::CAP_ANY)?;
 
     camera.set(videoio::CAP_PROP_FRAME_WIDTH, 1280.0)?;
     camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 720.0)?;

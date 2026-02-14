@@ -15,6 +15,7 @@ pub enum GemmType {
     Avx2,
     Avx512,
     Scalar,
+    None,
 }
 
 #[derive(Default, Debug)]
@@ -45,7 +46,7 @@ impl AppContext {
         self.gemm_type
     }
 
-    pub fn parse_command_line_arguments(args: &Vec<String>) -> Result<Self, String> {
+    pub fn parse_command_line_arguments(args: &[String]) -> Result<Self, String> {
         let mut context = AppContext::default();
 
         if args.is_empty() {
@@ -99,8 +100,14 @@ impl AppContext {
                 }
                 "--device" | "-d" => {
                     context.device = match value.to_lowercase().as_str() {
-                        "cpu" => Device::Cpu,
-                        "gpu" => Device::Gpu,
+                        "cpu" => {
+                            context.gemm_type = GemmType::Avx2;
+                            Device::Cpu
+                        }
+                        "gpu" => {
+                            context.gemm_type = GemmType::None;
+                            Device::Gpu
+                        }
                         _ => {
                             return Err(format!(
                                 "Unknown device type: {}. Use 'cpu' or 'gpu'.",
@@ -126,12 +133,19 @@ impl AppContext {
             }
         }
 
-        Ok(context)
+        match context.check_context_compatibility() {
+            Ok(()) => Ok(context),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn check_context_compatibility(&self) -> Result<(), String> {
         if self.cam_index != 0 {
             // vezi cum verifici camerele de pe pc
+        }
+
+        if self.device == Device::Gpu && self.gemm_type != GemmType::None {
+            return Err("Can't use cpu features on gpu !".to_string());
         }
 
         Ok(())
