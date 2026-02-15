@@ -1,4 +1,9 @@
-use crate::yolo::gemms::mm256_gemm::gemm_bias_blocked_avx2;
+#[cfg(target_arch = "x86_64")]
+use crate::yolo::gemms::mm512_gemm::gemm_bias_blocked_avx512;
+use crate::yolo::{
+    context::appcontext::{Device, get_global_context},
+    gemms::mm256_gemm::gemm_bias_blocked_avx2,
+};
 use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu};
 
 pub fn sgemm_bias_parallel(
@@ -33,24 +38,20 @@ pub fn sgemm_bias_parallel(
         return;
     }
 
-    #[cfg(target_arch = "x86_64")]
-    {
-        if std::is_x86_feature_detected!("avx512f") && std::is_x86_feature_detected!("fma") {
-            unsafe {
-                use crate::yolo::gemms::mm512_gemm::gemm_bias_blocked_avx512;
+    let context = get_global_context();
 
-                gemm_bias_blocked_avx512(m, n, k, a, b, bias, c, use_silu);
+    if context.get_device() == Device::Cpu {
+        match context.get_gemm_type() {
+            crate::yolo::context::appcontext::GemmType::Avx2 => {
+                unsafe { gemm_bias_blocked_avx2(m, n, k, a, b, bias, c, use_silu) };
             }
-            return;
-        }
-
-        if std::is_x86_feature_detected!("avx2") && std::is_x86_feature_detected!("fma") {
-            unsafe {
-                gemm_bias_blocked_avx2(m, n, k, a, b, bias, c, use_silu);
+            crate::yolo::context::appcontext::GemmType::Avx512 => {
+                unsafe { gemm_bias_blocked_avx512(m, n, k, a, b, bias, c, use_silu) };
             }
-            return;
+            _ => {
+                gemm_bias_blocked_scalar(m, n, k, a, b, bias, c, use_silu);
+            }
         }
+    } else {
     }
-
-    gemm_bias_blocked_scalar(m, n, k, a, b, bias, c, use_silu);
 }

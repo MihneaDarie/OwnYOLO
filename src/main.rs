@@ -7,7 +7,7 @@ use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
 
 use crate::yolo::{
     buffers::Buffers,
-    context::appcontext::AppContext,
+    context::appcontext::get_global_context,
     yolov8::{COCO_CLASSES, Detection, YoloV8},
 };
 
@@ -150,27 +150,17 @@ fn draw_detections(
 }
 
 fn main() -> Result<()> {
-    let args: Vec<String> = std::env::args().skip(1).collect();
+    let c = get_global_context();
 
-    let context = match AppContext::parse_command_line_arguments(&args) {
-        std::result::Result::Ok(context) => context,
-        Err(e) => {
-            panic!("{e}")
-        }
-    };
-
-    match context.check_context_compatibility() {
-        std::result::Result::Ok(()) => {}
-        Err(e) => {
-            panic!("{e}");
-        }
-    }
+    println!("{c:?}");
 
     rayon::ThreadPoolBuilder::new()
         .num_threads(12)
         .build_global()
         .unwrap();
     let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
+
+    // let mut camera = videoio::VideoCapture::from_file("/dev/video1", videoio::CAP_V4L2)?;
 
     camera.set(videoio::CAP_PROP_FRAME_WIDTH, 1280.0)?;
     camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 720.0)?;

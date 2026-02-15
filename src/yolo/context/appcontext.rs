@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, sync::OnceLock};
 
 #[repr(u8)]
 #[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
@@ -81,7 +81,9 @@ impl AppContext {
                 flag));
             }
 
-            if args.contains(&String::from("cpu")) && (args.contains(&String::from("--type")) || args.contains(&String::from("-t"))) {
+            if args.contains(&String::from("gpu"))
+                && (args.contains(&String::from("--type")) || args.contains(&String::from("-t")))
+            {
                 return Err("Can't set cpu specific features for gpu usage !".to_string());
             }
 
@@ -143,7 +145,7 @@ impl AppContext {
         }
     }
 
-    pub fn check_context_compatibility(&self) -> Result<(), String> {
+    pub fn check_context_compatibility(&mut self) -> Result<(), String> {
         if self.cam_index != 0 {
             // vezi cum verifici camerele de pe pc
         }
@@ -152,6 +154,51 @@ impl AppContext {
             return Err("Can't use cpu features on gpu !".to_string());
         }
 
+        if self.device == Device::Cpu {
+            match self.gemm_type {
+                GemmType::Avx2 => {
+                    if !std::is_x86_feature_detected!("avx2")
+                        || !std::is_x86_feature_detected!("fma")
+                    {
+                        println!("AVX2 selected but it is not avaible, switching to scalar !");
+                        self.gemm_type = GemmType::Scalar;
+                    }
+                }
+                GemmType::Avx512 => {
+                    if !std::is_x86_feature_detected!("fma")
+                        || !std::is_x86_feature_detected!("avx512f")
+                    {
+                        let mut message =
+                            "AVX512f selected but it is not avaible, switching to avx2 !"
+                                .to_string();
+                        self.gemm_type = GemmType::Avx2;
+                        if !std::is_x86_feature_detected!("avx2")
+                            || !std::is_x86_feature_detected!("fma")
+                        {
+                            message = "AVX512f selected but it is not avaible, neither avx2, switching to scalar !".to_string();
+                            self.gemm_type = GemmType::Scalar;
+                        }
+                        println!("{message}");
+                    }
+                }
+                _ => {}
+            }
+        }
+
         Ok(())
     }
+}
+
+static GLOBAL_CONTEXT: OnceLock<AppContext> = OnceLock::new();
+
+pub fn get_global_context() -> &'static AppContext {
+    GLOBAL_CONTEXT.get_or_init(|| {
+        let args: Vec<String> = std::env::args().skip(1).collect();
+        match AppContext::parse_command_line_arguments(&args) {
+            std::result::Result::Ok(context) => context,
+            Err(e) => {
+                panic!("{e}")
+            }
+        }
+    })
 }
