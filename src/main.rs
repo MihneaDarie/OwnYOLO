@@ -158,9 +158,9 @@ fn main() -> Result<()> {
         .num_threads(12)
         .build_global()
         .unwrap();
-    let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
+    // let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
 
-    // let mut camera = videoio::VideoCapture::from_file("/dev/video1", videoio::CAP_V4L2)?;
+    let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
 
     camera.set(videoio::CAP_PROP_FRAME_WIDTH, 1280.0)?;
     camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 720.0)?;

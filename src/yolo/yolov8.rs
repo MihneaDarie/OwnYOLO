@@ -1,7 +1,7 @@
 use crate::yolo::{
     buffers::*,
     gemms::gemm::sgemm_bias_parallel,
-    utils::{Conv2D, FFI, c2f_into, conv_silu_into, sigmoid},
+    utils::{Conv2D, c2f_into, conv_silu_into, sigmoid},
 };
 use anyhow::Result;
 use ndarray::{Array1, Array3, Array4, ArrayD};
@@ -962,43 +962,7 @@ pub fn conv_linear_into(
     let out_sl = out.as_slice_memory_order_mut().unwrap();
     let bias_slice = bias.map(|b| b.as_slice().unwrap());
 
-    if !FFI {
-        sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, false);
-    } else {
-        let (read_dst, beta) = if let Some(b) = bias {
-            out_sl
-                .par_chunks_mut(hw)
-                .enumerate()
-                .for_each(|(oc, row)| row.fill(b[oc]));
-            (true, 1.0f32)
-        } else {
-            (false, 0.0f32)
-        };
-
-        unsafe {
-            gemm::gemm::<f32>(
-                cout,
-                hw,
-                cin,
-                out_sl.as_mut_ptr(),
-                1,
-                hw as isize,
-                read_dst,
-                ws.as_ptr(),
-                1,
-                cin as isize,
-                xs.as_ptr(),
-                1,
-                hw as isize,
-                1.0,
-                beta,
-                false,
-                false,
-                false,
-                gemm::Parallelism::Rayon(0),
-            );
-        }
-    }
+    sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, false);
     Ok(())
 }
 

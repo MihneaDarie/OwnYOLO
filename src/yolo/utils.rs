@@ -1,5 +1,4 @@
 use anyhow::Result;
-use gemm::Parallelism;
 use ndarray::parallel::prelude::*;
 use ndarray::{Array1, Array4};
 use rayon::prelude::*;
@@ -8,8 +7,6 @@ use crate::yolo::gemms::gemm::sgemm_bias_parallel;
 
 use super::buffers::C2FBuffer;
 use super::yolov8::C2fWeights;
-
-pub static FFI: bool = false;
 
 #[inline(always)]
 pub fn sigmoid(x: f32) -> f32 {
@@ -193,47 +190,7 @@ pub fn conv_silu_into(
         let k_dim = cin * 9;
         let bias = conv_bias.map(|b| b.as_slice().unwrap());
 
-        if FFI {
-            let m = cout;
-            let n = hw_out;
-            let k = cin * 9;
-
-            if let Some(b) = conv_bias {
-                out_sl
-                    .par_chunks_mut(n)
-                    .enumerate()
-                    .for_each(|(oc, row)| row.fill(b[oc]));
-            } else {
-                out_sl.fill(0.0);
-            }
-
-            unsafe {
-                gemm::gemm::<f32>(
-                    m,
-                    n,
-                    k,
-                    out_sl.as_mut_ptr(),
-                    1,
-                    n as isize,
-                    true,
-                    ws.as_ptr(),
-                    1,
-                    k as isize,
-                    col_buffer.as_ptr(),
-                    1,
-                    n as isize,
-                    1.0,
-                    1.0,
-                    false,
-                    false,
-                    false,
-                    Parallelism::Rayon(0),
-                );
-            }
-            out_sl.par_iter_mut().for_each(|v| *v = silu(*v));
-        } else {
-            sgemm_bias_parallel(cout, hw_out, k_dim, ws, col_buffer, bias, out_sl, true);
-        }
+        sgemm_bias_parallel(cout, hw_out, k_dim, ws, col_buffer, bias, out_sl, true);
     });
 
     Ok(())

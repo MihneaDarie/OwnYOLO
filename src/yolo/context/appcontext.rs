@@ -9,13 +9,25 @@ pub enum Device {
 }
 
 #[repr(u8)]
-#[derive(Default, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GemmType {
-    #[default]
     Avx2,
     Avx512,
     Scalar,
     None,
+}
+
+impl Default for GemmType {
+
+    fn default() -> Self {
+        if std::is_x86_feature_detected!("avx512f") {
+            return Self::Avx512;
+        } else if std::is_x86_feature_detected!("avx2") {
+            return Self::Avx2;
+        } else {
+            Self::Scalar
+        }
+    }
 }
 
 #[derive(Default, Debug)]
