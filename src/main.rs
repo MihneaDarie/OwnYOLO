@@ -1,3 +1,4 @@
+mod graph_form;
 mod yolo;
 use std::time::Instant;
 
@@ -5,10 +6,13 @@ use anyhow::{Ok, Result};
 use ndarray::{Array, Array4};
 use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
 
-use crate::yolo::{
-    buffers::Buffers,
-    context::appcontext::get_global_context,
-    yolov8::{COCO_CLASSES, Detection, YoloV8},
+use crate::{
+    graph_form::graph::GraphForm,
+    yolo::{
+        buffers::Buffers,
+        context::appcontext::get_global_context,
+        yolov8::{COCO_CLASSES, Detection, YoloV8},
+    },
 };
 
 const COLORS: [VecN<f64, 4>; 8] = [
@@ -150,6 +154,10 @@ fn draw_detections(
 }
 
 fn main() -> Result<()> {
+    let graph = GraphForm::from_onnx_file("models/yolov8n.onnx")?;
+    println!("{}",graph.self_count(0));
+    return Ok(());
+
     let c = get_global_context();
 
     println!("{c:?}");

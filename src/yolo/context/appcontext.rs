@@ -18,7 +18,6 @@ pub enum GemmType {
 }
 
 impl Default for GemmType {
-
     fn default() -> Self {
         if std::is_x86_feature_detected!("avx512f") {
             return Self::Avx512;
