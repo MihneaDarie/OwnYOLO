@@ -13,3 +13,4 @@ pub mod soft_max;
 pub mod split;
 pub mod sub;
 pub mod transpose;
+pub mod hash_trait;

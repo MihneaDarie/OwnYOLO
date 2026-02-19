@@ -17,6 +17,14 @@ impl Node for SubNode {
             count
         }
     }
+
+    fn print(&self) {
+        println!("sub-{{}}");
+        if let Some(next) = &self.next_node {
+            next.print();
+        }
+    }
+
     fn insert(&mut self, next: Box<dyn Node>) -> Result<()> {
         if let Some(next_node) = &mut self.next_node {
             next_node.insert(next)?;

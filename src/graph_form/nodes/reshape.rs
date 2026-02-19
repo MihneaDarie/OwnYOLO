@@ -1,10 +1,27 @@
-use crate::graph_form::nodes::node::Node;
+use std::collections::HashMap;
+
+use crate::graph_form::nodes::{hash_trait::FromHashMap, node::Node};
 use anyhow::Result;
+use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct ReshapeNode {
     allow_zero: bool,
     next_node: Option<Box<dyn Node>>,
+}
+
+impl FromHashMap for ReshapeNode {
+    fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
+        Ok(Self {
+            allow_zero: {
+                match attrs.get("allow_zero") {
+                    Some(av) => av.as_int().unwrap() != 0,
+                    None => false,
+                }
+            },
+            next_node: None,
+        })
+    }
 }
 
 impl ReshapeNode {
@@ -20,6 +37,14 @@ impl Node for ReshapeNode {
     fn pass(&self) {
         todo!()
     }
+
+    fn print(&self) {
+        println!("rehape-{}", self.allow_zero);
+        if let Some(next) = &self.next_node {
+            next.print();
+        }
+    }
+
     fn self_count(&self, count: usize) -> usize {
         if let Some(next) = &self.next_node {
             next.self_count(count + 1)

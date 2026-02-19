@@ -1,5 +1,6 @@
-use crate::graph_form::nodes::node::Node;
+use crate::graph_form::nodes::{hash_trait::FromHashMap, node::Node};
 use anyhow::{Ok, Result};
+use onnx_extractor::AttributeValue;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AutoPad {
@@ -24,23 +25,72 @@ impl AutoPad {
 #[derive(Default)]
 pub struct ConvNode {
     auto_pad: AutoPad,
-    kernel_shape: [i64; 2],
+    kernel_shape: Vec<i64>,
     group: i64,
-    pads: [i64; 4],
-    strides: [i64; 2],
-    dilations: [i64; 2],
+    pads: Vec<i64>,
+    strides: Vec<i64>,
+    dilations: Vec<i64>,
 
     next_node: Option<Box<dyn Node>>,
+}
+
+impl FromHashMap for ConvNode {
+    fn from_hashmap(
+        attrs: &std::collections::HashMap<String, AttributeValue>,
+    ) -> anyhow::Result<Self> {
+        Ok(Self {
+            auto_pad: {
+                match attrs.get("auto_pad") {
+                    Some(av) => {
+                        let pad = av.as_string().unwrap();
+                        AutoPad::from_str(&pad)
+                    }
+                    None => AutoPad::NOTSET,
+                }
+            },
+            kernel_shape: {
+                match attrs.get("kernel_shape") {
+                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    None => vec![],
+                }
+            },
+            pads: {
+                match attrs.get("pads") {
+                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    None => vec![],
+                }
+            },
+            strides: {
+                match attrs.get("strides") {
+                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    None => vec![],
+                }
+            },
+            dilations: {
+                match attrs.get("dilations") {
+                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    None => vec![],
+                }
+            },
+            group: {
+                match attrs.get("groups") {
+                    Some(av) => av.as_int().unwrap(),
+                    None => 0,
+                }
+            },
+            next_node: None,
+        })
+    }
 }
 
 impl ConvNode {
     pub fn new(
         auto_pad: &str,
-        kernel_shape: [i64; 2],
+        kernel_shape: Vec<i64>,
         group: i64,
-        pads: [i64; 4],
-        strides: [i64; 2],
-        dilations: [i64; 2],
+        pads: Vec<i64>,
+        strides: Vec<i64>,
+        dilations: Vec<i64>,
     ) -> Self {
         Self {
             auto_pad: AutoPad::from_str(auto_pad),
@@ -58,6 +108,17 @@ impl Node for ConvNode {
     fn pass(&self) {
         todo!()
     }
+
+    fn print(&self) {
+        println!(
+            "conv-{:?},{:?},{:?},{:?},{:?},{:?}",
+            self.auto_pad, self.dilations, self.group, self.kernel_shape, self.pads, self.strides
+        );
+        if let Some(next) = &self.next_node {
+            next.print();
+        }
+    }
+
     fn self_count(&self, count: usize) -> usize {
         if let Some(next) = &self.next_node {
             next.self_count(count + 1)

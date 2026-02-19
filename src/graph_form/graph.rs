@@ -1,9 +1,7 @@
-use std::collections::HashSet;
-
 use crate::graph_form::nodes::{
-    add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, max_pool::MaxPoolNode,
-    mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode, sigmoid::SigmoidNode,
-    slice::SliceNode, soft_max::SoftMaxNode, split::SplitNode, sub::SubNode,
+    add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, hash_trait::FromHashMap,
+    max_pool::MaxPoolNode, mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode,
+    sigmoid::SigmoidNode, slice::SliceNode, soft_max::SoftMaxNode, split::SplitNode, sub::SubNode,
     transpose::TransposeNode,
 };
 use anyhow::{Ok, Result};
@@ -35,57 +33,78 @@ impl GraphForm {
         }
     }
 
+    pub fn print(&self) {
+        println!("start!");
+        if let Some(next) = &self.start_node {
+            next.print();
+        }
+    }
+
     pub fn from_onnx_file(onnx_file_path: &str) -> Result<Self> {
         let onnx = OnnxModel::load_from_file(onnx_file_path)?;
 
-        println!("{}",onnx.execution_order().unwrap().len());
+        println!("{}", onnx.execution_order().unwrap().len());
 
         let mut ret = Self::new();
 
         onnx.execution_order()?.into_iter().for_each(|elem| {
-            println!("{},{:?}",elem.op_type,elem.attributes);
+            // println!("{},{:?}", elem.op_type, elem.attributes);
             match elem.op_type.as_str() {
                 "Concat" => {
-                    ret.insert(Box::new(ConcatNode::default())).unwrap();
+                    let mut concat = ConcatNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(concat)).unwrap();
                 }
                 "Sigmoid" => {
-                    ret.insert(Box::new(SigmoidNode::default())).unwrap();
+                    let mut sigmoid = SigmoidNode::default();
+                    ret.insert(Box::new(sigmoid)).unwrap();
                 }
                 "Conv" => {
-                    ret.insert(Box::new(ConvNode::default())).unwrap();
+                    let mut conv = ConvNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(conv)).unwrap();
                 }
                 "Resize" => {
-                    ret.insert(Box::new(ResizeNode::default())).unwrap();
+                    let mut resize = ResizeNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(resize)).unwrap();
                 }
                 "Transpose" => {
-                    ret.insert(Box::new(TransposeNode::default())).unwrap();
+                    let mut trans = TransposeNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(trans)).unwrap();
                 }
                 "Sub" => {
-                    ret.insert(Box::new(SubNode::default())).unwrap();
+                    let mut sub = SubNode::default();
+                    ret.insert(Box::new(sub)).unwrap();
                 }
                 "MaxPool" => {
-                    ret.insert(Box::new(MaxPoolNode::default())).unwrap();
+                    let mut max_pool = MaxPoolNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(max_pool)).unwrap();
                 }
                 "Div" => {
-                    ret.insert(Box::new(DivNode::default())).unwrap();
+                    let mut div = DivNode::default();
+                    ret.insert(Box::new(div)).unwrap();
                 }
                 "Softmax" => {
-                    ret.insert(Box::new(SoftMaxNode::default())).unwrap();
+                    let mut soft_max = SoftMaxNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(soft_max)).unwrap();
                 }
                 "Split" => {
-                    ret.insert(Box::new(SplitNode::default())).unwrap();
+                    let mut split = SplitNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(split)).unwrap();
                 }
                 "Add" => {
-                    ret.insert(Box::new(AddNode::default())).unwrap();
+                    let mut add = AddNode::default();
+                    ret.insert(Box::new(add)).unwrap();
                 }
                 "Mul" => {
-                    ret.insert(Box::new(MulNode::default())).unwrap();
+                    let mut mul = MulNode::default();
+                    ret.insert(Box::new(mul)).unwrap();
                 }
                 "Reshape" => {
-                    ret.insert(Box::new(ReshapeNode::default())).unwrap();
+                    let mut reshape = ReshapeNode::from_hashmap(&elem.attributes).unwrap();
+                    ret.insert(Box::new(reshape)).unwrap();
                 }
                 "Slice" => {
-                    ret.insert(Box::new(SliceNode::default())).unwrap();
+                    let mut slice = SliceNode::default();
+                    ret.insert(Box::new(slice)).unwrap();
                 }
                 _ => {}
             }

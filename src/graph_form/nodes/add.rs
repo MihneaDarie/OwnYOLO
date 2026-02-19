@@ -1,4 +1,4 @@
-use crate::graph_form::nodes::node::Node;
+use crate::{graph_form::nodes::node::Node};
 use anyhow::Result;
 
 #[derive(Default)]
@@ -9,6 +9,13 @@ pub struct AddNode {
 impl Node for AddNode {
     fn pass(&self) {
         todo!()
+    }
+
+    fn print(&self) {
+        println!("add-{{}}");
+        if let Some(next) = &self.next_node {
+            next.print();
+        }
     }
 
     fn self_count(&self, count: usize) -> usize {

@@ -156,6 +156,7 @@ fn draw_detections(
 fn main() -> Result<()> {
     let graph = GraphForm::from_onnx_file("models/yolov8n.onnx")?;
     println!("{}",graph.self_count(0));
+    graph.print();
     return Ok(());
 
     let c = get_global_context();

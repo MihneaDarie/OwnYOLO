@@ -10,6 +10,14 @@ impl Node for MulNode {
     fn pass(&self) {
         todo!()
     }
+
+    fn print(&self) {
+        println!("mul-{{}}");
+        if let Some(next) = &self.next_node {
+            next.print();
+        }
+    }
+
     fn self_count(&self, count: usize) -> usize {
         if let Some(next) = &self.next_node {
             next.self_count(count + 1)
