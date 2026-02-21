@@ -24,6 +24,10 @@ impl AutoPad {
 
 #[derive(Default)]
 pub struct MaxPoolNode {
+    x: String,
+
+    o: String,
+
     auto_pad: AutoPad,
     ceil_mode: i64,
     kernel_shape: Vec<i64>,
@@ -39,6 +43,8 @@ impl FromHashMap for MaxPoolNode {
         attrs: &std::collections::HashMap<String, AttributeValue>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
+            x: String::new(),
+            o: String::new(),
             auto_pad: {
                 match attrs.get("auto_pad") {
                     Some(av) => {
@@ -100,6 +106,8 @@ impl MaxPoolNode {
         pads: Vec<i64>,
     ) -> Self {
         Self {
+            x: String::new(),
+            o: String::new(),
             auto_pad: AutoPad::from_str(auto_pad),
             ceil_mode,
             kernel_shape,
@@ -109,6 +117,14 @@ impl MaxPoolNode {
             storage_order,
             next_node: None,
         }
+    }
+
+    pub fn add_input_strings(&mut self, x: String) {
+        self.x = x;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
     }
 }
 

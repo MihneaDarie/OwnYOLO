@@ -3,7 +3,21 @@ use anyhow::Result;
 
 #[derive(Default)]
 pub struct SigmoidNode {
+    x: String,
+
+    o: String,
+
     next_node: Option<Box<dyn Node>>,
+}
+
+impl SigmoidNode {
+    pub fn add_input_strings(&mut self, x: String,) {
+        self.x = x;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
+    }
 }
 
 impl Node for SigmoidNode {

@@ -6,6 +6,10 @@ use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct SoftMaxNode {
+    input: String,
+
+    o: String,
+
     axis: i64,
 
     next_node: Option<Box<dyn Node>>,
@@ -14,6 +18,8 @@ pub struct SoftMaxNode {
 impl FromHashMap for SoftMaxNode {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
+            input: String::new(),
+            o: String::new(),
             axis: match attrs.get("axis") {
                 Some(av) => av.as_int().unwrap(),
                 None => 0,
@@ -26,9 +32,24 @@ impl FromHashMap for SoftMaxNode {
 impl SoftMaxNode {
     pub fn new(axis: i64) -> Self {
         Self {
+            input: String::new(),
+
+            o: String::new(),
+
             axis,
             next_node: None,
         }
+    }
+
+    pub fn add_input_strings(
+        &mut self,
+        input: String,
+    ) {
+        self.input = input;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
     }
 }
 

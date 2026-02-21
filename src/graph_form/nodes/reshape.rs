@@ -6,6 +6,11 @@ use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct ReshapeNode {
+    data: String,
+    shape: String,
+
+    o: String,
+
     allow_zero: bool,
     next_node: Option<Box<dyn Node>>,
 }
@@ -13,6 +18,10 @@ pub struct ReshapeNode {
 impl FromHashMap for ReshapeNode {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
+            data: String::new(),
+            shape: String::new(),
+
+            o: String::new(),
             allow_zero: {
                 match attrs.get("allow_zero") {
                     Some(av) => av.as_int().unwrap() != 0,
@@ -27,9 +36,21 @@ impl FromHashMap for ReshapeNode {
 impl ReshapeNode {
     pub fn new(allow_zero: bool) -> Self {
         Self {
+            data: String::new(),
+            shape: String::new(),
+
+            o: String::new(),
             allow_zero,
             next_node: None,
         }
+    }
+     pub fn add_input_strings(&mut self, data: String, shape: String) {
+        self.shape = shape;
+        self.data = data;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
     }
 }
 

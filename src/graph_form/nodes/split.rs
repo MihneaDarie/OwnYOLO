@@ -6,6 +6,11 @@ use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct SplitNode {
+    input: String,
+    split: String,
+
+    o: String,
+
     axis: i64,
     num_outputs: i64,
 
@@ -15,6 +20,11 @@ pub struct SplitNode {
 impl FromHashMap for SplitNode {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
+            input: String::new(),
+            split: String::new(),
+
+            o: String::new(),
+
             axis: match attrs.get("axis") {
                 Some(av) => av.as_int().unwrap(),
                 None => 0,
@@ -31,11 +41,29 @@ impl FromHashMap for SplitNode {
 impl SplitNode {
     pub fn new(axis: i64, num_outputs: i64) -> Self {
         Self {
+            input: String::new(),
+            split: String::new(),
+
+            o: String::new(),
             axis,
             num_outputs,
             next_node: None,
         }
     }
+
+     pub fn add_input_strings(
+        &mut self,
+        input: String,
+        split: String,
+    ) {
+        self.input = input;
+        self.split = split;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
+    }
+
 }
 
 impl Node for SplitNode {

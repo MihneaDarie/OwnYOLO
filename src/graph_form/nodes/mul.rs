@@ -3,7 +3,24 @@ use anyhow::Result;
 
 #[derive(Default)]
 pub struct MulNode {
+
+    a: String,
+    b: String,
+
+    o: String,
+
     next_node: Option<Box<dyn Node>>,
+}
+
+impl MulNode {
+    pub fn add_input_strings(&mut self, a: String, b: String) {
+        self.a = a;
+        self.b = b;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
+    }
 }
 
 impl Node for MulNode {

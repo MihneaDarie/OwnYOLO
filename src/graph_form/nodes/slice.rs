@@ -3,7 +3,34 @@ use anyhow::Result;
 
 #[derive(Default)]
 pub struct SliceNode {
+
+    data: String,
+    starts: String,
+    ends: String,
+    axes: String,
+
+    o: String,
+
     next_node: Option<Box<dyn Node>>,
+}
+
+impl SliceNode {
+    pub fn add_input_strings(
+        &mut self,
+        data: String,
+        starts: String,
+        ends: String,
+        axes: String,
+    ) {
+        self.data = data;
+        self.starts = starts;
+        self.ends = ends;
+        self.axes = axes;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
+    }
 }
 
 impl Node for SliceNode {

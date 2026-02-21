@@ -6,8 +6,23 @@ use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct ConcatNode {
+
+    inputs: Vec<String>,
+
+    o: String,
+
     axis: i64,
     next_node: Option<Box<dyn Node>>,
+}
+
+impl ConcatNode {
+    pub fn add_input_strings(&mut self, inputs: Vec<String>) {
+        self.inputs = inputs; 
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o; 
+    }
 }
 
 impl FromHashMap for ConcatNode {
@@ -20,6 +35,8 @@ impl FromHashMap for ConcatNode {
                 }
             },
             next_node: None,
+            inputs: vec![],
+            o: String::new(),
         })
     }
 }

@@ -6,6 +6,10 @@ use onnx_extractor::AttributeValue;
 
 #[derive(Default)]
 pub struct TransposeNode {
+    input: String,
+
+    o: String,
+
     perm: Vec<i64>,
 
     next_node: Option<Box<dyn Node>>,
@@ -14,6 +18,8 @@ pub struct TransposeNode {
 impl FromHashMap for TransposeNode {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
+            input: String::new(),
+            o: String::new(),
             perm: match attrs.get("perm") {
                 Some(av) => av.as_ints().unwrap().to_vec(),
                 None => vec![],
@@ -26,9 +32,19 @@ impl FromHashMap for TransposeNode {
 impl TransposeNode {
     pub fn new(perm: Vec<i64>) -> Self {
         Self {
+            input: String::new(),
+            o: String::new(),
             perm,
             next_node: None,
         }
+    }
+
+    pub fn add_input_strings(&mut self, input: String) {
+        self.input = input;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
     }
 }
 

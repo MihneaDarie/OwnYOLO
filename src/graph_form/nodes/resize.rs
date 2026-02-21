@@ -84,6 +84,13 @@ impl NearestMode {
 
 #[derive(Default)]
 pub struct ResizeNode {
+    x: String,
+    roi: Option<String>,
+    scales: Option<String>,
+    sizes: Option<String>,
+
+    o: String,
+
     antialias: i64,
     axes: Vec<i64>,
     mode: Mode,
@@ -100,6 +107,13 @@ pub struct ResizeNode {
 impl FromHashMap for ResizeNode {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
+            x: String::new(),
+            roi: None,
+            scales: None,
+            sizes: None,
+
+            o: String::new(),
+
             antialias: match attrs.get("antialias") {
                 Some(av) => av.as_int().unwrap(),
                 None => 0,
@@ -156,6 +170,13 @@ impl ResizeNode {
         neares_mode: &str,
     ) -> Self {
         Self {
+            x: String::new(),
+            roi: None,
+            scales: None,
+            sizes: None,
+            
+            o: String::new(),
+
             antialias,
             axes,
             mode: Mode::from_str(mode),
@@ -169,6 +190,23 @@ impl ResizeNode {
             ),
             next_node: None,
         }
+    }
+
+    pub fn add_input_strings(
+        &mut self,
+        x: String,
+        roi: Option<String>,
+        scales: Option<String>,
+        sizes: Option<String>,
+    ) {
+        self.x = x;
+        self.roi = roi;
+        self.scales = scales;
+        self.sizes = sizes;
+    }
+
+    pub fn add_output_strings(&mut self, o: String) {
+        self.o = o;
     }
 }
 
