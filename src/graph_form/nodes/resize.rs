@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use crate::graph_form::nodes::{hash_trait::FromHashMap, node::Node};
+use crate::graph_form::{
+    nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
+    tensor_map::TensorMap,
+    typed_array::TypedArray,
+};
 use anyhow::Result;
 use onnx_extractor::AttributeValue;
 
@@ -83,7 +87,7 @@ impl NearestMode {
 }
 
 #[derive(Default)]
-pub struct ResizeNode {
+pub struct ResizeNode<T: Default> {
     x: String,
     roi: Option<String>,
     scales: Option<String>,
@@ -91,8 +95,10 @@ pub struct ResizeNode {
 
     o: String,
 
+    unique_id: UniqueId,
+
     antialias: i64,
-    axes: Vec<i64>,
+    axes: Vec<usize>,
     mode: Mode,
     cubic_coeff_a: f32,
     exclude_outside: bool,
@@ -101,10 +107,10 @@ pub struct ResizeNode {
     neares_mode: NearestMode,
     coordinate_transformation_mode: CoordinateTransformationMode,
 
-    next_node: Option<Box<dyn Node>>,
+    next_node: Option<Box<dyn Node<T>>>,
 }
 
-impl FromHashMap for ResizeNode {
+impl<T: Default> FromHashMap for ResizeNode<T> {
     fn from_hashmap(attrs: &HashMap<String, AttributeValue>) -> Result<Self> {
         Ok(Self {
             x: String::new(),
@@ -113,6 +119,7 @@ impl FromHashMap for ResizeNode {
             sizes: None,
 
             o: String::new(),
+            unique_id: UniqueId::Resize,
 
             antialias: match attrs.get("antialias") {
                 Some(av) => av.as_int().unwrap(),
@@ -120,7 +127,7 @@ impl FromHashMap for ResizeNode {
             },
             axes: {
                 match attrs.get("axes") {
-                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    Some(av) => av.as_ints().unwrap().iter().map(|&val| val as usize).collect(),
                     None => vec![],
                 }
             },
@@ -157,10 +164,10 @@ impl FromHashMap for ResizeNode {
     }
 }
 
-impl ResizeNode {
+impl<T: Default> ResizeNode<T> {
     pub fn new(
         antialias: i64,
-        axes: Vec<i64>,
+        axes: Vec<usize>,
         mode: &str,
         cubic_coeff_a: f32,
         exclude_outside: bool,
@@ -174,7 +181,7 @@ impl ResizeNode {
             roi: None,
             scales: None,
             sizes: None,
-            
+
             o: String::new(),
 
             antialias,
@@ -188,6 +195,7 @@ impl ResizeNode {
             coordinate_transformation_mode: CoordinateTransformationMode::from_str(
                 coordinate_transformation_mode,
             ),
+            unique_id: UniqueId::Resize,
             next_node: None,
         }
     }
@@ -210,24 +218,47 @@ impl ResizeNode {
     }
 }
 
-impl Node for ResizeNode {
-    fn pass(&self) {
-        todo!()
+impl<T: Default> Node<T> for ResizeNode<T> {
+    fn get_unique_id(&self) -> UniqueId {
+        self.unique_id
+    }
+
+    fn get_next(&self) -> Option<&Box<dyn Node<T>>> {
+        self.next_node.as_ref()
+    }
+
+    fn pass(&self, omap: &mut TensorMap) {
+        let empty = String::from("");
+        let sizes = self.sizes.as_ref().unwrap_or(&empty);
+        let scales = self.scales.as_ref().unwrap_or(&empty);
+
+        let [x, sizes, scales, o] = omap.get_disjoint_mut([&self.x, &sizes, &scales, &self.o]);
+        let x = &*x.unwrap();
+        let sizes = sizes.as_deref();
+        let scales = scales.as_deref();
+
+        match o {
+            Some(result) => {
+                x.resize(sizes, scales, &self.mode, result).unwrap();
+            }
+            None => panic!("ResizeNode: missing input x={}", self.x),
+        }
+
+        if let Some(next) = &self.next_node {
+            next.pass(omap);
+        }
+    }
+
+    fn output_names(&self) -> Vec<String> {
+        vec![self.o.clone()]
     }
 
     fn print(&self) {
         println!(
-            "resize-{},{:?},{:?},{},{},{},{:?},{:?},{:?}",
-            self.antialias,
-            self.axes,
-            self.coordinate_transformation_mode,
-            self.cubic_coeff_a,
-            self.exclude_outside,
-            self.extrapolation_value,
-            self.keep_aspect_ratio_policy,
-            self.mode,
-            self.neares_mode
+            "resize-{},{:?},{:?},{:?},{}",
+            self.x, self.roi, self.scales, self.sizes, self.o
         );
+
         if let Some(next) = &self.next_node {
             next.print();
         }
@@ -240,7 +271,8 @@ impl Node for ResizeNode {
             count
         }
     }
-    fn insert(&mut self, next: Box<dyn Node>) -> Result<()> {
+
+    fn insert(&mut self, next: Box<dyn Node<T>>) -> Result<()> {
         if let Some(next_node) = &mut self.next_node {
             next_node.insert(next)?;
             return Ok(());

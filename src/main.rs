@@ -3,11 +3,11 @@ mod yolo;
 use std::time::Instant;
 
 use anyhow::{Ok, Result};
-use ndarray::{Array, Array4};
+use ndarray::{Array, Array4, Ix3};
 use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
 
 use crate::{
-    graph_form::graph::GraphForm,
+    graph_form::{graph::GraphForm, typed_array::TypedArray},
     yolo::{
         buffers::Buffers,
         context::appcontext::get_global_context,
@@ -33,8 +33,8 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
     let new_size = 640.0f32;
     let scale = (new_size / in_w).min(new_size / in_h);
 
-    let resized_w = (in_w * scale).round() as i32;
-    let resized_h = (in_h * scale).round() as i32;
+    let resized_w = (in_w * scale) as i32;
+    let resized_h = (in_h * scale) as i32;
 
     let mut resized = Mat::default();
     imgproc::resize(
@@ -46,8 +46,8 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
         imgproc::INTER_LINEAR,
     )?;
 
-    let pad_w = 640 - resized_w;
-    let pad_h = 640 - resized_h;
+    let pad_w = (640 - resized_w).max(0);
+    let pad_h = (640 - resized_h).max(0);
 
     let pad_left = pad_w / 2;
     let pad_right = pad_w - pad_left;
@@ -67,7 +67,6 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
     )?;
 
     let mut rgb = Mat::default();
-    // imgproc::cvt_color(&padded, &mut rgb, imgproc::COLOR_BGR2RGB, 0)?;
 
     imgproc::cvt_color(
         &padded,
@@ -154,10 +153,7 @@ fn draw_detections(
 }
 
 fn main() -> Result<()> {
-    let graph = GraphForm::from_onnx_file("models/yolov8n.onnx")?;
-    println!("{}",graph.self_count(0));
-    // graph.print();
-    return Ok(());
+    let (graph, mut omap) = GraphForm::<f32>::from_onnx_file("models/yolov8n.onnx")?;
 
     let c = get_global_context();
 
@@ -167,30 +163,28 @@ fn main() -> Result<()> {
         .num_threads(12)
         .build_global()
         .unwrap();
+
+    //windows
     // let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
+    // camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
+    // camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
 
+    //linux
     let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
-
-    camera.set(videoio::CAP_PROP_FRAME_WIDTH, 1280.0)?;
-    camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 720.0)?;
+    camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
+    camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
 
     if !videoio::VideoCapture::is_opened(&camera)? {
         anyhow::bail!("Failed to open camera!");
     }
 
     let mut frame = Mat::default();
-
     let window_name = "YOLOv8 Object Detection (Press 'q' to exit)";
     highgui::named_window(window_name, highgui::WINDOW_NORMAL)?;
-    highgui::resize_window(window_name, 1280, 720)?;
-
-    println!("Loading YOLOv8 model...");
-    let model = YoloV8::new("data/yolo_weights_fused.npz")?;
-    let mut buffers = Buffers::new();
-    println!("Model loaded!");
+    highgui::resize_window(window_name, 1000, 500)?;
 
     let conf_threshold = 0.25;
-    let iou_threshold = 0.35;
+    let iou_threshold = 0.45;
 
     let mut frame_count = 0;
     let mut total_inference_time = 0.0;
@@ -202,22 +196,22 @@ fn main() -> Result<()> {
 
         let read_success = camera.read(&mut frame)?;
         if !read_success || frame.empty() {
-            println!("Could not read frame from camera. Exiting.");
             break;
         }
 
         let (input, scale, pad_x, pad_y) = preprocess_image(&frame)?;
 
         let start_inference = Instant::now();
-        model.forward(&input, &mut buffers)?;
+        graph.pass(&mut omap, &input.into_dyn());
         let inference_time = start_inference.elapsed();
         total_inference_time += inference_time.as_secs_f32();
 
-        let detections = model.postprocess(
-            &buffers.model_22_buffer.final_output,
-            conf_threshold,
-            iou_threshold,
-        );
+        let output = match omap.get("output0").unwrap() {
+            TypedArray::F32(a) => a.view().into_dimensionality::<Ix3>().unwrap(),
+            _ => panic!("output0 is not F32"),
+        };
+
+        let detections = postprocess_onnx(&output, conf_threshold, iou_threshold);
 
         draw_detections(&mut frame, &detections, scale, pad_x, pad_y)?;
 
@@ -244,8 +238,7 @@ fn main() -> Result<()> {
 
         highgui::imshow(window_name, &frame)?;
 
-        let key = highgui::wait_key(1)?;
-        if key == 113 || key == 27 {
+        if highgui::wait_key(1)? == 113 {
             break;
         }
         // break;
@@ -253,4 +246,94 @@ fn main() -> Result<()> {
 
     highgui::destroy_window(window_name)?;
     Ok(())
+}
+
+fn nms(detections: &mut [Detection], iou_threshold: f32) -> Vec<Detection> {
+    detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
+
+    let mut keep = Vec::new();
+    let mut suppressed = vec![false; detections.len()];
+
+    for i in 0..detections.len() {
+        if suppressed[i] {
+            continue;
+        }
+
+        keep.push(detections[i]);
+
+        for j in (i + 1)..detections.len() {
+            if suppressed[j] {
+                continue;
+            }
+
+            if detections[i].class_id == detections[j].class_id {
+                let iou = compute_iou(&detections[i].bbox, &detections[j].bbox);
+                if iou > iou_threshold {
+                    suppressed[j] = true;
+                }
+            }
+        }
+    }
+
+    keep
+}
+
+fn compute_iou(a: &[f32; 4], b: &[f32; 4]) -> f32 {
+    let x1 = a[0].max(b[0]);
+    let y1 = a[1].max(b[1]);
+    let x2 = a[2].min(b[2]);
+    let y2 = a[3].min(b[3]);
+
+    let inter_w = (x2 - x1).max(0.0);
+    let inter_h = (y2 - y1).max(0.0);
+    let inter_area = inter_w * inter_h;
+
+    let a_area = (a[2] - a[0]) * (a[3] - a[1]);
+    let b_area = (b[2] - b[0]) * (b[3] - b[1]);
+
+    let union_area = a_area + b_area - inter_area;
+
+    if union_area > 0.0 {
+        inter_area / union_area
+    } else {
+        0.0
+    }
+}
+
+fn postprocess_onnx(
+    output: &ndarray::ArrayView3<f32>,
+    conf_threshold: f32,
+    iou_threshold: f32,
+) -> Vec<Detection> {
+    let num_boxes = output.shape()[2];
+    let mut detections = Vec::new();
+
+    for i in 0..num_boxes {
+        let mut best_class = 0;
+        let mut best_score = 0.0f32;
+        for c in 0..80 {
+            let score = output[[0, 4 + c, i]];
+            if score > best_score {
+                best_score = score;
+                best_class = c;
+            }
+        }
+
+        if best_score < conf_threshold {
+            continue;
+        }
+
+        let cx = output[[0, 0, i]];
+        let cy = output[[0, 1, i]];
+        let w = output[[0, 2, i]];
+        let h = output[[0, 3, i]];
+
+        detections.push(Detection {
+            bbox: [cx - w / 2.0, cy - h / 2.0, cx + w / 2.0, cy + h / 2.0],
+            confidence: best_score,
+            class_id: best_class,
+        });
+    }
+
+    nms(&mut detections, iou_threshold)
 }

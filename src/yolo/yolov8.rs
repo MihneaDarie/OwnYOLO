@@ -308,18 +308,20 @@ impl YoloV8 {
     pub fn forward(&self, x: &Array4<f32>, buffers: &mut Buffers) -> Result<()> {
         // BACKBONE
         conv_silu_into(
-            x,
-            &self.weights.model_0.conv_weight,
-            self.weights.model_0.conv_bias.as_ref(),
+            &x.view(),
+            &self.weights.model_0.conv_weight.view(),
+            self.weights.model_0.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_0_buffer.conv_out,
+            &mut buffers.model_0_buffer.conv_out.view_mut(),
+            false,
         )?;
         conv_silu_into(
-            &buffers.model_0_buffer.conv_out,
-            &self.weights.model_1.conv_weight,
-            self.weights.model_1.conv_bias.as_ref(),
+            &buffers.model_0_buffer.conv_out.view(),
+            &self.weights.model_1.conv_weight.view(),
+            self.weights.model_1.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_1_buffer.conv_out,
+            &mut buffers.model_1_buffer.conv_out.view_mut(),
+            false,
         )?;
 
         c2f_into(
@@ -330,11 +332,12 @@ impl YoloV8 {
         )?;
 
         conv_silu_into(
-            &buffers.model_2_buffer.last,
-            &self.weights.model_3.conv_weight,
-            self.weights.model_3.conv_bias.as_ref(),
+            &buffers.model_2_buffer.last.view(),
+            &self.weights.model_3.conv_weight.view(),
+            self.weights.model_3.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_3_buffer.conv_out,
+            &mut buffers.model_3_buffer.conv_out.view_mut(),
+            false,
         )?;
 
         c2f_into(
@@ -345,11 +348,12 @@ impl YoloV8 {
         )?;
 
         conv_silu_into(
-            &buffers.model_4_buffer.last,
-            &self.weights.model_5.conv_weight,
-            self.weights.model_5.conv_bias.as_ref(),
+            &buffers.model_4_buffer.last.view(),
+            &self.weights.model_5.conv_weight.view(),
+            self.weights.model_5.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_5_buffer.conv_out,
+            &mut buffers.model_5_buffer.conv_out.view_mut(),
+            false,
         )?;
 
         c2f_into(
@@ -360,11 +364,12 @@ impl YoloV8 {
         )?;
 
         conv_silu_into(
-            &buffers.model_6_buffer.last,
-            &self.weights.model_7.conv_weight,
-            self.weights.model_7.conv_bias.as_ref(),
+            &buffers.model_6_buffer.last.view(),
+            &self.weights.model_7.conv_weight.view(),
+            self.weights.model_7.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_7_buffer.conv_out,
+            &mut buffers.model_7_buffer.conv_out.view_mut(),
+            false,
         )?;
 
         c2f_into(
@@ -418,11 +423,12 @@ impl YoloV8 {
         )?;
 
         conv_silu_into(
-            &buffers.model_15_buffer.last,
-            &self.weights.model_16.conv_weight,
-            self.weights.model_16.conv_bias.as_ref(),
+            &buffers.model_15_buffer.last.view(),
+            &self.weights.model_16.conv_weight.view(),
+            self.weights.model_16.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_16_buffer.conv_out,
+            &mut buffers.model_16_buffer.conv_out.view_mut(),
+            false,
         )?;
         concat_channels(
             &buffers.model_16_buffer.conv_out,
@@ -437,11 +443,12 @@ impl YoloV8 {
         )?;
 
         conv_silu_into(
-            &buffers.model_18_buffer.last,
-            &self.weights.model_19.conv_weight,
-            self.weights.model_19.conv_bias.as_ref(),
+            &buffers.model_18_buffer.last.view(),
+            &self.weights.model_19.conv_weight.view(),
+            self.weights.model_19.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
-            &mut buffers.model_19_buffer.conv_out,
+            &mut buffers.model_19_buffer.conv_out.view_mut(),
+            false,
         )?;
 
         concat_channels(
@@ -561,19 +568,21 @@ impl YoloV8 {
         let (r_cv2, r_cv3) = rayon::join(
             || -> anyhow::Result<()> {
                 conv_silu_into(
-                    input,
-                    &cv2_block.conv0.conv_weight,
-                    cv2_block.conv0.conv_bias.as_ref(),
+                    &input.view(),
+                    &cv2_block.conv0.conv_weight.view(),
+                    cv2_block.conv0.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
-                    cv2_0_out,
+                    &mut cv2_0_out.view_mut(),
+                    false,
                 )?;
 
                 conv_silu_into(
-                    cv2_0_out,
-                    &cv2_block.conv1.conv_weight,
-                    cv2_block.conv1.conv_bias.as_ref(),
+                    &cv2_0_out.view(),
+                    &cv2_block.conv1.conv_weight.view(),
+                    cv2_block.conv1.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
-                    cv2_1_out,
+                    &mut cv2_1_out.view_mut(),
+                    false,
                 )?;
 
                 conv_linear_into(
@@ -586,19 +595,21 @@ impl YoloV8 {
             },
             || -> anyhow::Result<()> {
                 conv_silu_into(
-                    input,
-                    &cv3_block.conv0.conv_weight,
-                    cv3_block.conv0.conv_bias.as_ref(),
+                    &input.view(),
+                    &cv3_block.conv0.conv_weight.view(),
+                    cv3_block.conv0.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
-                    cv3_0_out,
+                    &mut cv3_0_out.view_mut(),
+                    false,
                 )?;
 
                 conv_silu_into(
-                    cv3_0_out,
-                    &cv3_block.conv1.conv_weight,
-                    cv3_block.conv1.conv_bias.as_ref(),
+                    &cv3_0_out.view(),
+                    &cv3_block.conv1.conv_weight.view(),
+                    cv3_block.conv1.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
-                    cv3_1_out,
+                    &mut cv3_1_out.view_mut(),
+                    false,
                 )?;
 
                 conv_linear_into(
@@ -644,11 +655,12 @@ impl YoloV8 {
         buf: &mut SPPFBuffer,
     ) -> Result<()> {
         conv_silu_into(
-            x,
-            &weights.cv1.conv_weight,
-            weights.cv1.conv_bias.as_ref(),
+            &x.view(),
+            &weights.cv1.conv_weight.view(),
+            weights.cv1.conv_bias.as_ref().map(|a| a.view()),
             &CONV_1X1_S1,
-            &mut buf.cv1_out,
+            &mut buf.cv1_out.view_mut(),
+            false,
         )?;
         maxpool_5x5(&buf.cv1_out, &mut buf.pool_1);
         maxpool_5x5(&buf.pool_1, &mut buf.pool_2);
@@ -663,11 +675,12 @@ impl YoloV8 {
         );
 
         conv_silu_into(
-            &buf.concat,
-            &weights.cv2.conv_weight,
-            weights.cv2.conv_bias.as_ref(),
+            &buf.concat.view(),
+            &weights.cv2.conv_weight.view(),
+            weights.cv2.conv_bias.as_ref().map(|a| a.view()),
             &CONV_1X1_S1,
-            &mut buf.cv2_out,
+            &mut buf.cv2_out.view_mut(),
+            false,
         )?;
 
         Ok(())
@@ -745,52 +758,6 @@ impl YoloV8 {
         out[4 * num_anchors..84 * num_anchors].copy_from_slice(class_out);
 
         Ok(())
-    }
-
-    pub fn postprocess(
-        &self,
-        output: &Array3<f32>,
-        conf_threshold: f32,
-        iou_threshold: f32,
-    ) -> Vec<Detection> {
-        let (_, _, num_anchors) = output.dim();
-        let out = output.as_slice_memory_order().unwrap();
-
-        let mut candidates: Vec<Detection> = Vec::with_capacity(1024);
-
-        for a in 0..num_anchors {
-            let mut best_class = 0usize;
-            let mut best_score = 0.0f32;
-
-            for c in 0..80 {
-                let score = out[(4 + c) * num_anchors + a];
-                if score > best_score {
-                    best_score = score;
-                    best_class = c;
-                }
-            }
-
-            if best_score >= conf_threshold {
-                candidates.push(Detection {
-                    bbox: [
-                        out[a],
-                        out[num_anchors + a],
-                        out[2 * num_anchors + a],
-                        out[3 * num_anchors + a],
-                    ],
-                    confidence: best_score,
-                    class_id: best_class,
-                });
-            }
-        }
-
-        candidates.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-        let top_k = 300;
-        if candidates.len() > top_k {
-            candidates.truncate(top_k);
-        }
-
-        nms(&mut candidates, iou_threshold)
     }
 }
 
@@ -964,56 +931,4 @@ pub fn conv_linear_into(
 
     sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, false);
     Ok(())
-}
-
-fn nms(detections: &mut [Detection], iou_threshold: f32) -> Vec<Detection> {
-    detections.sort_by(|a, b| b.confidence.partial_cmp(&a.confidence).unwrap());
-
-    let mut keep = Vec::new();
-    let mut suppressed = vec![false; detections.len()];
-
-    for i in 0..detections.len() {
-        if suppressed[i] {
-            continue;
-        }
-
-        keep.push(detections[i]);
-
-        for j in (i + 1)..detections.len() {
-            if suppressed[j] {
-                continue;
-            }
-
-            if detections[i].class_id == detections[j].class_id {
-                let iou = compute_iou(&detections[i].bbox, &detections[j].bbox);
-                if iou > iou_threshold {
-                    suppressed[j] = true;
-                }
-            }
-        }
-    }
-
-    keep
-}
-
-fn compute_iou(a: &[f32; 4], b: &[f32; 4]) -> f32 {
-    let x1 = a[0].max(b[0]);
-    let y1 = a[1].max(b[1]);
-    let x2 = a[2].min(b[2]);
-    let y2 = a[3].min(b[3]);
-
-    let inter_w = (x2 - x1).max(0.0);
-    let inter_h = (y2 - y1).max(0.0);
-    let inter_area = inter_w * inter_h;
-
-    let a_area = (a[2] - a[0]) * (a[3] - a[1]);
-    let b_area = (b[2] - b[0]) * (b[3] - b[1]);
-
-    let union_area = a_area + b_area - inter_area;
-
-    if union_area > 0.0 {
-        inter_area / union_area
-    } else {
-        0.0
-    }
 }

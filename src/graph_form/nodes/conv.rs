@@ -1,4 +1,13 @@
-use crate::graph_form::nodes::{hash_trait::FromHashMap, node::Node};
+use std::collections::HashMap;
+
+use crate::{
+    graph_form::{
+        nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
+        tensor_map::TensorMap,
+        typed_array::TypedArray,
+    },
+    yolo::utils::Conv2D,
+};
 use anyhow::{Ok, Result};
 use onnx_extractor::AttributeValue;
 
@@ -23,24 +32,26 @@ impl AutoPad {
 }
 
 #[derive(Default)]
-pub struct ConvNode {
+pub struct ConvNode<T: Default> {
     x: String,
     w: String,
     b: Option<String>,
 
     o: String,
 
-    auto_pad: AutoPad,
-    kernel_shape: Vec<i64>,
-    group: i64,
-    pads: Vec<i64>,
-    strides: Vec<i64>,
-    dilations: Vec<i64>,
+    unique_id: UniqueId,
 
-    next_node: Option<Box<dyn Node>>,
+    auto_pad: AutoPad,
+    kernel_shape: Vec<usize>,
+    group: i64,
+    pads: Vec<usize>,
+    strides: Vec<usize>,
+    dilations: Vec<usize>,
+
+    next_node: Option<Box<dyn Node<T>>>,
 }
 
-impl FromHashMap for ConvNode {
+impl<T: Default> FromHashMap for ConvNode<T> {
     fn from_hashmap(
         attrs: &std::collections::HashMap<String, AttributeValue>,
     ) -> anyhow::Result<Self> {
@@ -60,25 +71,25 @@ impl FromHashMap for ConvNode {
             },
             kernel_shape: {
                 match attrs.get("kernel_shape") {
-                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    Some(av) => av.as_ints().unwrap().to_vec().iter().map(|&val| val as usize).collect(),
                     None => vec![],
                 }
             },
             pads: {
                 match attrs.get("pads") {
-                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    Some(av) => av.as_ints().unwrap().to_vec().iter().map(|&val| val as usize).collect(),
                     None => vec![],
                 }
             },
             strides: {
                 match attrs.get("strides") {
-                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    Some(av) => av.as_ints().unwrap().to_vec().iter().map(|&val| val as usize).collect(),
                     None => vec![],
                 }
             },
             dilations: {
                 match attrs.get("dilations") {
-                    Some(av) => av.as_ints().unwrap().to_vec(),
+                    Some(av) => av.as_ints().unwrap().to_vec().iter().map(|&val| val as usize).collect(),
                     None => vec![],
                 }
             },
@@ -88,19 +99,20 @@ impl FromHashMap for ConvNode {
                     None => 0,
                 }
             },
+            unique_id: UniqueId::Conv,
             next_node: None,
         })
     }
 }
 
-impl ConvNode {
+impl<T: Default> ConvNode<T> {
     pub fn new(
         auto_pad: &str,
-        kernel_shape: Vec<i64>,
+        kernel_shape: Vec<usize>,
         group: i64,
-        pads: Vec<i64>,
-        strides: Vec<i64>,
-        dilations: Vec<i64>,
+        pads: Vec<usize>,
+        strides: Vec<usize>,
+        dilations: Vec<usize>,
     ) -> Self {
         Self {
             x: String::new(),
@@ -113,6 +125,7 @@ impl ConvNode {
             pads,
             strides,
             dilations,
+            unique_id: UniqueId::Conv,
             next_node: None,
         }
     }
@@ -128,16 +141,50 @@ impl ConvNode {
     }
 }
 
-impl Node for ConvNode {
-    fn pass(&self) {
-        todo!()
+impl<T: Default> Node<T> for ConvNode<T> {
+    fn get_unique_id(&self) -> UniqueId {
+        self.unique_id
+    }
+
+    fn output_names(&self) -> Vec<String> {
+        vec![self.o.clone()]
+    }
+
+    fn get_next(&self) -> Option<&Box<dyn Node<T>>> {
+        self.next_node.as_ref()
+    }
+
+    fn pass(&self, omap: &mut TensorMap) {
+        let def = &String::from("");
+        let b = self.b.as_ref().unwrap_or(def);
+        
+        let [x, w, b, o] = omap.get_disjoint_mut([&self.x, &self.w, &b, &self.o]);
+        let x = &*x.unwrap();
+        let w = &*w.unwrap();
+        let b = match b {
+            Some(b) => Some(&*b),
+            None => None,
+        };
+
+        match o {
+            Some(result) => {
+                let cfg = Conv2D {
+                    pad: self.pads.first().copied().unwrap_or(0) as usize,
+                    stride: self.strides.first().copied().unwrap_or(1) as usize,
+                };
+                x.conv(&w, b, &cfg, result, false).unwrap();
+            }
+            _ => panic!("ConvNode: missing input(s) - x={} w={}", self.x, self.w),
+        }
+
+        if let Some(next) = &self.next_node {
+            next.pass(omap);
+        }
     }
 
     fn print(&self) {
-        println!(
-            "conv-{:?},{:?},{:?},{:?},{:?},{:?}",
-            self.auto_pad, self.dilations, self.group, self.kernel_shape, self.pads, self.strides
-        );
+        println!("conv-{},{},{:?},{}", self.x, self.w, self.b, self.o);
+
         if let Some(next) = &self.next_node {
             next.print();
         }
@@ -150,7 +197,8 @@ impl Node for ConvNode {
             count
         }
     }
-    fn insert(&mut self, next: Box<dyn Node>) -> Result<()> {
+
+    fn insert(&mut self, next: Box<dyn Node<T>>) -> Result<()> {
         if let Some(next_node) = &mut self.next_node {
             next_node.insert(next)?;
             return Ok(());

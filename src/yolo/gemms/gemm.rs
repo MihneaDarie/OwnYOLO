@@ -4,7 +4,7 @@ use crate::yolo::{
     context::appcontext::{Device, get_global_context},
     gemms::mm256_gemm::gemm_bias_blocked_avx2,
 };
-use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu};
+use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu_f32};
 
 pub fn sgemm_bias_parallel(
     m: usize,
@@ -29,7 +29,7 @@ pub fn sgemm_bias_parallel(
                     sum += a[i * k + p] * b[p * n + j];
                 }
                 c[i * n + j] = if use_silu {
-                    silu(sum + bias_val)
+                    silu_f32(sum + bias_val)
                 } else {
                     sum + bias_val
                 };

@@ -1,32 +1,38 @@
-use crate::graph_form::nodes::{
-    add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, hash_trait::FromHashMap,
-    max_pool::MaxPoolNode, mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode,
-    sigmoid::SigmoidNode, slice::SliceNode, soft_max::SoftMaxNode, split::SplitNode, sub::SubNode,
-    transpose::TransposeNode,
+use crate::graph_form::{
+    nodes::{
+        add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, hash_trait::FromHashMap,
+        max_pool::MaxPoolNode, mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode,
+        sigmoid::SigmoidNode, slice::SliceNode, soft_max::SoftMaxNode, split::SplitNode,
+        sub::SubNode, transpose::TransposeNode,
+    },
+    tensor_map::TensorMap,
+    typed_array::TypedArray,
 };
-use anyhow::{Ok, Result};
+use anyhow::Ok;
+use ndarray::ArrayD;
 use onnx_extractor::OnnxModel;
+use std::collections::HashMap;
 
-pub struct GraphForm {
-    start_node: Option<Box<dyn Node>>,
+pub struct GraphForm<T: Default> {
+    // nodes: Vec<Box<dyn Node<T>>>,
+    nodes: Option<Box<dyn Node<T>>>,
 }
 
-impl GraphForm {
+impl<T: Default + 'static> GraphForm<T> {
     pub fn new() -> Self {
-        Self { start_node: None }
+        Self { nodes: None }
     }
 
-    pub fn insert(&mut self, next: Box<dyn Node>) -> Result<()> {
-        if let Some(start_node) = &mut self.start_node {
-            start_node.insert(next)?;
+    pub fn insert(&mut self, node: Box<dyn Node<T>>) {
+        if let Some(next) = &mut self.nodes {
+            next.insert(node).unwrap();
         } else {
-            self.start_node = Some(next)
+            self.nodes = Some(node)
         }
-        Ok(())
     }
 
     pub fn self_count(&self, count: usize) -> usize {
-        if let Some(next) = &self.start_node {
+        if let Some(next) = &self.nodes {
             next.self_count(count + 1)
         } else {
             count
@@ -35,33 +41,48 @@ impl GraphForm {
 
     pub fn print(&self) {
         println!("start!");
-        if let Some(next) = &self.start_node {
+        if let Some(next) = &self.nodes {
             next.print();
         }
     }
 
-    pub fn from_onnx_file(onnx_file_path: &str) -> Result<Self> {
+    pub fn load_data_arrays(onnx: &OnnxModel) -> TensorMap {
+        let mut map = TensorMap::new();
+
+        onnx.tensor_names().iter().for_each(|t| {
+            if let Some(tensor) = onnx.get_tensor(t) {
+                let typed = if tensor.data().is_ok() {
+                    TypedArray::from_tensor(&tensor)
+                } else {
+                    TypedArray::from_tensor_empty(tensor)
+                };
+                map.insert(tensor.name().to_string(), typed);
+            }
+        });
+
+        map
+    }
+
+    pub fn from_onnx_file(onnx_file_path: &str) -> anyhow::Result<(Self, TensorMap)> {
         let onnx = OnnxModel::load_from_file(onnx_file_path)?;
 
-        println!("{}", onnx.execution_order().unwrap().len());
-
         let mut ret = Self::new();
+        let map = Self::load_data_arrays(&onnx);
 
-        onnx.execution_order()?.into_iter().for_each(|elem| {
-            println!("{},{}", elem.op_type, elem.inputs.len());
-            elem.inputs.iter().for_each(|val| println!("{}", val));
-            match elem.op_type.as_str() {
+        onnx.execution_order()?
+            .into_iter()
+            .for_each(|elem| match elem.op_type.as_str() {
                 "Concat" => {
                     let mut concat = ConcatNode::from_hashmap(&elem.attributes).unwrap();
                     concat.add_input_strings(elem.inputs.clone());
                     concat.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(concat)).unwrap();
+                    ret.insert(Box::new(concat));
                 }
                 "Sigmoid" => {
-                    let mut sigmoid = SigmoidNode::default();
+                    let mut sigmoid = SigmoidNode::new();
                     sigmoid.add_input_strings(elem.inputs[0].clone());
                     sigmoid.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(sigmoid)).unwrap();
+                    ret.insert(Box::new(sigmoid));
                 }
                 "Conv" => {
                     let mut conv = ConvNode::from_hashmap(&elem.attributes).unwrap();
@@ -69,71 +90,75 @@ impl GraphForm {
                     let b = inputs.get(2).map(|s| s.clone());
                     conv.add_input_strings(inputs[0].clone(), inputs[1].clone(), b);
                     conv.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(conv)).unwrap();
+                    ret.insert(Box::new(conv));
                 }
                 "Resize" => {
+                    let inputs = &elem.inputs;
+                    let roi = inputs.get(1).filter(|s| !s.is_empty()).cloned();
+                    let scales = inputs.get(2).filter(|s| !s.is_empty()).cloned();
+                    let sizes = inputs.get(3).filter(|s| !s.is_empty()).cloned();
+
                     let mut resize = ResizeNode::from_hashmap(&elem.attributes).unwrap();
-                    resize.add_input_strings(elem.inputs[0].clone(), None, None, None);
+                    resize.add_input_strings(inputs[0].clone(), roi, scales, sizes);
                     resize.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(resize)).unwrap();
+                    ret.insert(Box::new(resize));
                 }
                 "Transpose" => {
                     let mut trans = TransposeNode::from_hashmap(&elem.attributes).unwrap();
                     trans.add_input_strings(elem.inputs[0].clone());
                     trans.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(trans)).unwrap();
+                    ret.insert(Box::new(trans));
                 }
                 "Sub" => {
-                    let mut sub = SubNode::default();
+                    let mut sub = SubNode::new();
                     sub.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
                     sub.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(sub)).unwrap();
+                    ret.insert(Box::new(sub));
                 }
                 "MaxPool" => {
                     let mut max_pool = MaxPoolNode::from_hashmap(&elem.attributes).unwrap();
                     max_pool.add_input_strings(elem.inputs[0].clone());
                     max_pool.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(max_pool)).unwrap();
+                    ret.insert(Box::new(max_pool));
                 }
                 "Div" => {
-                    let mut div = DivNode::default();
+                    let mut div = DivNode::new();
                     div.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
                     div.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(div)).unwrap();
+                    ret.insert(Box::new(div));
                 }
                 "Softmax" => {
                     let mut soft_max = SoftMaxNode::from_hashmap(&elem.attributes).unwrap();
                     soft_max.add_input_strings(elem.inputs[0].clone());
                     soft_max.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(soft_max)).unwrap();
+                    ret.insert(Box::new(soft_max));
                 }
                 "Split" => {
                     let mut split = SplitNode::from_hashmap(&elem.attributes).unwrap();
-
                     split.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
-                    split.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(split)).unwrap();
+                    split.add_output_strings(elem.outputs.clone());
+                    ret.insert(Box::new(split));
                 }
                 "Add" => {
-                    let mut add = AddNode::default();
+                    let mut add = AddNode::new();
                     add.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
                     add.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(add)).unwrap();
+                    ret.insert(Box::new(add));
                 }
                 "Mul" => {
-                    let mut mul = MulNode::default();
+                    let mut mul = MulNode::new();
                     mul.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
                     mul.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(mul)).unwrap();
+                    ret.insert(Box::new(mul));
                 }
                 "Reshape" => {
                     let mut reshape = ReshapeNode::from_hashmap(&elem.attributes).unwrap();
                     reshape.add_input_strings(elem.inputs[0].clone(), elem.inputs[1].clone());
                     reshape.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(reshape)).unwrap();
+                    ret.insert(Box::new(reshape));
                 }
                 "Slice" => {
-                    let mut slice = SliceNode::default();
+                    let mut slice = SliceNode::new();
                     let input = &elem.inputs;
                     slice.add_input_strings(
                         input[0].clone(),
@@ -142,20 +167,19 @@ impl GraphForm {
                         input[3].clone(),
                     );
                     slice.add_output_strings(elem.outputs[0].clone());
-                    ret.insert(Box::new(slice)).unwrap();
+                    ret.insert(Box::new(slice));
                 }
                 _ => {}
-            }
-        });
+            });
 
-        // let mut hash = HashSet::new();
-        // onnx.execution_order()?.into_iter().for_each(|element| {
-        //     hash.insert(element.op_type.clone());
-        // });
+        Ok((ret, map))
+    }
 
-        // hash.iter()
-        //     .for_each(|elem| println!("\"{}\" => {{}},", elem));
+    pub fn pass(&self, omap: &mut TensorMap, input: &ArrayD<f32>) {
+        omap.insert("images".to_string(), TypedArray::F32(input.clone()));
 
-        Ok(ret)
+        if let Some(next_node) = &self.nodes {
+            next_node.pass(omap);
+        }
     }
 }

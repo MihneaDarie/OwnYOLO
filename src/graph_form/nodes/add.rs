@@ -1,18 +1,35 @@
-use crate::{graph_form::nodes::node::Node};
+use std::collections::HashMap;
+
+use crate::graph_form::{
+    nodes::{node::Node, unique_ids::UniqueId},
+    tensor_map::TensorMap,
+    typed_array::TypedArray,
+};
 use anyhow::Result;
 
 #[derive(Default)]
-pub struct AddNode {
-
+pub struct AddNode<T: Default> {
     a: String,
     b: String,
 
     o: String,
 
-    next_node: Option<Box<dyn Node>>,
+    unique_id: UniqueId,
+
+    next_node: Option<Box<dyn Node<T>>>,
 }
 
-impl AddNode {
+impl<T: Default> AddNode<T> {
+    pub fn new() -> Self {
+        Self {
+            a: String::new(),
+            b: String::new(),
+            o: String::new(),
+            unique_id: UniqueId::Add,
+            next_node: None,
+        }
+    }
+
     pub fn add_input_strings(&mut self, a: String, b: String) {
         self.a = a;
         self.b = b;
@@ -23,13 +40,38 @@ impl AddNode {
     }
 }
 
-impl Node for AddNode {
-    fn pass(&self) {
-        todo!()
+impl<T: Default> Node<T> for AddNode<T> {
+    fn get_unique_id(&self) -> UniqueId {
+        self.unique_id
+    }
+
+    fn output_names(&self) -> Vec<String> {
+        vec![self.o.clone()]
+    }
+
+    fn get_next(&self) -> Option<&Box<dyn Node<T>>> {
+        self.next_node.as_ref()
+    }
+
+    fn pass(&self, omap: &mut TensorMap) {
+        let [a, b, o] = omap.get_disjoint_mut([&self.a, &self.b, &self.o]);
+        let a = &*a.unwrap();
+        let b = &*b.unwrap();
+
+        match o {
+            Some(out) => {
+                a.add(&b, out).unwrap();
+            }
+            _ => panic!("AddNode: missing input(s) - a={} b={}", self.a, self.b),
+        }
+
+        if let Some(next) = &self.next_node {
+            next.pass(omap);
+        }
     }
 
     fn print(&self) {
-        println!("add-{{}}");
+        println!("add-{},{},{}", self.a, self.b, self.o);
         if let Some(next) = &self.next_node {
             next.print();
         }
@@ -43,7 +85,7 @@ impl Node for AddNode {
         }
     }
 
-    fn insert(&mut self, next: Box<dyn Node>) -> Result<()> {
+    fn insert(&mut self, next: Box<dyn Node<T>>) -> Result<()> {
         if let Some(next_node) = &mut self.next_node {
             next_node.insert(next)?;
             return Ok(());

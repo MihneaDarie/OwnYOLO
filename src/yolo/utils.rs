@@ -1,6 +1,6 @@
 use anyhow::Result;
 use ndarray::parallel::prelude::*;
-use ndarray::{Array1, Array4};
+use ndarray::{Array1, Array4, ArrayView1, ArrayView4, ArrayViewMut4};
 use rayon::prelude::*;
 
 use crate::yolo::gemms::gemm::sgemm_bias_parallel;
@@ -14,7 +14,7 @@ pub fn sigmoid(x: f32) -> f32 {
 }
 
 #[inline(always)]
-pub fn silu(x: f32) -> f32 {
+pub fn silu_f32(x: f32) -> f32 {
     if x < -4.0 {
         0.0
     } else if x > 4.0 {
@@ -23,6 +23,28 @@ pub fn silu(x: f32) -> f32 {
         let a = 0.25;
         x * (0.5 + a * x - a * x.abs() * x / 8.0)
     }
+}
+
+#[inline(always)]
+pub fn silu_f64(x: f64) -> f64 {
+    if x < -4.0 {
+        0.0
+    } else if x > 4.0 {
+        x
+    } else {
+        let a = 0.25;
+        x * (0.5 + a * x - a * x.abs() * x / 8.0)
+    }
+}
+
+#[inline(always)]
+pub fn aprox_sigmoid_f32(x: f32) -> f32 {
+    silu_f32(x) / x
+}
+
+#[inline(always)]
+pub fn aprox_sigmoid_f64(x: f64) -> f64 {
+    silu_f64(x) / x
 }
 
 #[inline(always)]
@@ -151,11 +173,12 @@ fn run_func_with_f32_buffer<R>(buf_size: usize, f: impl FnOnce(&mut [f32]) -> R)
 }
 
 pub fn conv_silu_into(
-    x: &Array4<f32>,
-    w: &Array4<f32>,
-    conv_bias: Option<&Array1<f32>>,
+    x: &ArrayView4<f32>,
+    w: &ArrayView4<f32>,
+    conv_bias: Option<ArrayView1<f32>>,
     cfg: &Conv2D,
-    out: &mut Array4<f32>,
+    out: &mut ArrayViewMut4<f32>,
+    use_silu: bool,
 ) -> Result<()> {
     let (_, cin, hin, win) = x.dim();
     let (cout, _, kh, kw) = w.dim();
@@ -165,9 +188,9 @@ pub fn conv_silu_into(
         let xs = x.as_slice_memory_order().unwrap();
         let ws = w.as_slice_memory_order().unwrap();
         let out_sl = out.as_slice_memory_order_mut().unwrap();
-        let bias = conv_bias.map(|b| b.as_slice().unwrap());
+        let bias = conv_bias.as_ref().map(|b| b.as_slice().unwrap());
 
-        sgemm_bias_parallel(cout, hw, cin, ws, xs, bias, out_sl, true);
+        sgemm_bias_parallel(cout, hw, cin, ws, xs, bias, out_sl, use_silu);
         return Ok(());
     }
 
@@ -188,9 +211,9 @@ pub fn conv_silu_into(
         }
 
         let k_dim = cin * 9;
-        let bias = conv_bias.map(|b| b.as_slice().unwrap());
+        let bias = conv_bias.as_ref().map(|b| b.as_slice().unwrap());
 
-        sgemm_bias_parallel(cout, hw_out, k_dim, ws, col_buffer, bias, out_sl, true);
+        sgemm_bias_parallel(cout, hw_out, k_dim, ws, col_buffer, bias, out_sl, use_silu);
     });
 
     Ok(())
@@ -201,6 +224,7 @@ pub fn conv1x1_silu_into_blocks(
     bias: Option<&Array1<f32>>,
     blocks: &[(&[f32], usize)],
     out: &mut Array4<f32>,
+    use_silu: bool,
 ) -> Result<()> {
     let (cout, cin, _, _) = w.dim();
     let (_, _, h, wout) = out.dim();
@@ -224,7 +248,16 @@ pub fn conv1x1_silu_into_blocks(
 
         let bias_slice = bias.map(|b| b.as_slice().unwrap());
 
-        sgemm_bias_parallel(cout, hw, cin, wsl, concat_input, bias_slice, out_sl, true);
+        sgemm_bias_parallel(
+            cout,
+            hw,
+            cin,
+            wsl,
+            concat_input,
+            bias_slice,
+            out_sl,
+            use_silu,
+        );
     });
 
     Ok(())
@@ -237,11 +270,12 @@ pub fn c2f_into(
     shortcut: bool,
 ) -> Result<()> {
     conv_silu_into(
-        x,
-        &w.cv1.conv_weight,
-        w.cv1.conv_bias.as_ref(),
+        &x.view(),
+        &w.cv1.conv_weight.view(),
+        w.cv1.conv_bias.as_ref().map(|a| a.view()),
         &CFG_1X1_S1_P0,
-        &mut buf.initial,
+        &mut buf.initial.view_mut(),
+        false,
     )?;
 
     let (_, c2, h, ww) = buf.initial.dim();
@@ -263,19 +297,21 @@ pub fn c2f_into(
         let bw = &w.bottlenecks[i];
 
         conv_silu_into(
-            &buf.split_1,
-            &bw.cv1.conv_weight,
-            bw.cv1.conv_bias.as_ref(),
+            &buf.split_1.view(),
+            &bw.cv1.conv_weight.view(),
+            bw.cv1.conv_bias.as_ref().map(|array| array.view()),
             &CFG_3X3_S1_P1,
-            &mut bbuf.cv1_out,
+            &mut bbuf.cv1_out.view_mut(),
+            false,
         )?;
 
         conv_silu_into(
-            &bbuf.cv1_out,
-            &bw.cv2.conv_weight,
-            bw.cv2.conv_bias.as_ref(),
+            &bbuf.cv1_out.view(),
+            &bw.cv2.conv_weight.view(),
+            bw.cv2.conv_bias.as_ref().map(|a| a.view()),
             &CFG_3X3_S1_P1,
-            &mut bbuf.cv2_out,
+            &mut bbuf.cv2_out.view_mut(),
+            false,
         )?;
 
         if shortcut {
@@ -314,6 +350,7 @@ pub fn c2f_into(
         w.cv2.conv_bias.as_ref(),
         &blocks_all,
         &mut buf.last,
+        false,
     )?;
 
     Ok(())

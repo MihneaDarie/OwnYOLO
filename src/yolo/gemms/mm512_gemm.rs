@@ -3,7 +3,7 @@ use rayon::prelude::*;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 
-use crate::yolo::utils::silu;
+use crate::yolo::utils::silu_f32;
 
 const MC: usize = 64;
 const KC: usize = 256;
@@ -287,11 +287,11 @@ pub fn gemm_bias_blocked_scalar(
             Some(bb) => {
                 c.par_chunks_mut(n).enumerate().for_each(|(i, row)| {
                     let bias_val = bb[i];
-                    row.iter_mut().for_each(|v| *v = silu(*v + bias_val));
+                    row.iter_mut().for_each(|v| *v = silu_f32(*v + bias_val));
                 });
             }
             None => {
-                c.par_iter_mut().for_each(|v| *v = silu(*v));
+                c.par_iter_mut().for_each(|v| *v = silu_f32(*v));
             }
         },
         false => {
