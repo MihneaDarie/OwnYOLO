@@ -446,13 +446,33 @@ impl TypedArray {
         Ok(())
     }
 
+    pub fn silu(&self, o: &mut TypedArray) -> anyhow::Result<()> {
+        match (self, &mut *o) {
+            (TypedArray::F32(i), TypedArray::F32(o)) => {
+                let src = i.as_slice_memory_order().unwrap();
+                let dst = o.as_slice_memory_order_mut().unwrap();
+                dst.par_iter_mut()
+                    .zip(src.par_iter())
+                    .for_each(|(d, s)| *d = silu_f32(*s));
+            }
+            (TypedArray::F64(i), TypedArray::F64(o)) => {
+                let src = i.as_slice_memory_order().unwrap();
+                let dst = o.as_slice_memory_order_mut().unwrap();
+                dst.par_iter_mut()
+                    .zip(src.par_iter())
+                    .for_each(|(d, s)| *d = silu_f64(*s));
+            }
+            _ => return Err(anyhow::anyhow!("sigmoid only supported for F32/F64")),
+        }
+        Ok(())
+    }
+
     pub fn reshape(
         &self,
         shape: &TypedArray,
         allow_zero: bool,
         o: &mut TypedArray,
     ) -> anyhow::Result<()> {
-
         macro_rules! reshape_variant {
             ($variant:ident, $a:expr) => {{
                 if let TypedArray::$variant(out) = o {

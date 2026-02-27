@@ -11,7 +11,6 @@ use crate::graph_form::{
 use anyhow::Ok;
 use ndarray::ArrayD;
 use onnx_extractor::OnnxModel;
-use std::collections::HashMap;
 
 pub struct GraphForm<T: Default> {
     // nodes: Vec<Box<dyn Node<T>>>,
@@ -173,6 +172,12 @@ impl<T: Default + 'static> GraphForm<T> {
             });
 
         Ok((ret, map))
+    }
+
+    pub fn optimize_nodes(&mut self) {
+        if let Some(node) = &mut self.nodes {
+            node.optimize_further();
+        }
     }
 
     pub fn pass(&self, omap: &mut TensorMap, input: &ArrayD<f32>) {

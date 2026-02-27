@@ -9,12 +9,16 @@ pub enum UniqueId {
     Mul,
     Reshape,
     Resize,
-    Sigmoid,
     Slice,
     Softmax,
     Split,
     Sub,
     Transpose,
+
+    //Activations
+    Sigmoid,
+    Silu,
+    
     #[default]
     Undefined,
 }

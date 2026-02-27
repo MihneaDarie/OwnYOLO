@@ -15,3 +15,4 @@ pub mod split;
 pub mod sub;
 pub mod transpose;
 pub mod unique_ids;
+pub mod silu;

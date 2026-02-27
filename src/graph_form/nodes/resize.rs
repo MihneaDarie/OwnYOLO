@@ -107,7 +107,7 @@ pub struct ResizeNode<T: Default> {
     neares_mode: NearestMode,
     coordinate_transformation_mode: CoordinateTransformationMode,
 
-    next_node: Option<Box<dyn Node<T>>>,
+    next_node: Option<Vec<Box<dyn Node<T>>>>,
 }
 
 impl<T: Default> FromHashMap for ResizeNode<T> {
@@ -127,7 +127,12 @@ impl<T: Default> FromHashMap for ResizeNode<T> {
             },
             axes: {
                 match attrs.get("axes") {
-                    Some(av) => av.as_ints().unwrap().iter().map(|&val| val as usize).collect(),
+                    Some(av) => av
+                        .as_ints()
+                        .unwrap()
+                        .iter()
+                        .map(|&val| val as usize)
+                        .collect(),
                     None => vec![],
                 }
             },
@@ -218,13 +223,41 @@ impl<T: Default> ResizeNode<T> {
     }
 }
 
-impl<T: Default> Node<T> for ResizeNode<T> {
+impl<T: Default + 'static> Node<T> for ResizeNode<T> {
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
+fn get_unique_id_mut(&mut self) -> UniqueId {
+        self.unique_id
+    }
 
-    fn get_next(&self) -> Option<&Box<dyn Node<T>>> {
-        self.next_node.as_ref()
+    fn get_next(&self) -> Option<Vec<&Box<dyn Node<T>>>> {
+        match &self.next_node {
+            Some(list) => Some(list.iter().collect()) ,
+            None => None,
+        }
+    }
+
+    fn take_next(&mut self) -> Option<Vec<Box<dyn Node<T>>>> {
+    self.next_node.take()
+}
+fn get_next_mut(&mut self) -> Option<Vec<&mut Box<dyn Node<T>>>> {
+        match self.next_node.as_mut() {
+            Some(list) => Some(list.iter_mut().collect()),
+            None => None,
+        }
+    }
+
+    fn set_next(&mut self, next: Option<Vec<Box<dyn Node<T>>>>) {
+        self.next_node = next;
+    }
+
+    fn input_names(&self) -> Vec<String> {
+        let roi = self.roi.clone().unwrap_or(String::from(""));
+        let scales = self.scales.clone().unwrap_or(String::from(""));
+        let sizes = self.sizes.clone().unwrap_or(String::from(""));
+
+        vec![self.x.clone(), roi, scales, sizes]
     }
 
     fn pass(&self, omap: &mut TensorMap) {
@@ -245,7 +278,7 @@ impl<T: Default> Node<T> for ResizeNode<T> {
         }
 
         if let Some(next) = &self.next_node {
-            next.pass(omap);
+            next.iter().for_each(|val| val.pass(omap));
         }
     }
 
@@ -260,13 +293,19 @@ impl<T: Default> Node<T> for ResizeNode<T> {
         );
 
         if let Some(next) = &self.next_node {
-            next.print();
+            next.iter().for_each(|v| v.print());
         }
     }
 
     fn self_count(&self, count: usize) -> usize {
         if let Some(next) = &self.next_node {
-            next.self_count(count + 1)
+            let mut ct = 0;
+            let mut sum = 0;
+            next.iter().for_each(|val| {
+                sum += val.self_count(ct);
+                ct += 1;
+            });
+            sum
         } else {
             count
         }
@@ -274,10 +313,10 @@ impl<T: Default> Node<T> for ResizeNode<T> {
 
     fn insert(&mut self, next: Box<dyn Node<T>>) -> Result<()> {
         if let Some(next_node) = &mut self.next_node {
-            next_node.insert(next)?;
+            next_node[0].insert(next)?;
             return Ok(());
         } else {
-            self.next_node = Some(next)
+            self.next_node = Some(vec![next])
         }
         Ok(())
     }
