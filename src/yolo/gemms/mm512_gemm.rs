@@ -452,3 +452,67 @@ pub unsafe fn apply_sigmoid_avx512(dst: *mut f32, src: *const f32, n: usize) {
         }
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn add_avx512(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 16 * 16;
+        for i in (0..chunks).step_by(16) {
+            let a_chunck = _mm512_loadu_ps(a.add(i));
+            let b_chunck = _mm512_loadu_ps(b.add(i));
+            _mm512_storeu_ps(dst.add(i), _mm512_add_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) + *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn sub_avx512(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 16 * 16;
+        for i in (0..chunks).step_by(16) {
+            let a_chunck = _mm512_loadu_ps(a.add(i));
+            let b_chunck = _mm512_loadu_ps(b.add(i));
+            _mm512_storeu_ps(dst.add(i), _mm512_sub_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) - *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn mul_avx512(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 16 * 16;
+        for i in (0..chunks).step_by(16) {
+            let a_chunck = _mm512_loadu_ps(a.add(i));
+            let b_chunck = _mm512_loadu_ps(b.add(i));
+            _mm512_storeu_ps(dst.add(i), _mm512_mul_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) * *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn div_avx512(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 16 * 16;
+        for i in (0..chunks).step_by(16) {
+            let a_chunck = _mm512_loadu_ps(a.add(i));
+            let b_chunck = _mm512_loadu_ps(b.add(i));
+            _mm512_storeu_ps(dst.add(i), _mm512_div_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) / *b.add(i);
+        }
+    }
+}

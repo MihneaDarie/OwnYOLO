@@ -333,3 +333,67 @@ pub unsafe fn apply_sigmoid_avx2(dst: *mut f32, src: *const f32, n: usize) {
         }
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn add_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 8 * 8;
+        for i in (0..chunks).step_by(8) {
+            let a_chunck = _mm256_loadu_ps(a.add(i));
+            let b_chunck = _mm256_loadu_ps(b.add(i));
+            _mm256_storeu_ps(dst.add(i), _mm256_add_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) + *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn sub_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 8 * 8;
+        for i in (0..chunks).step_by(8) {
+            let a_chunck = _mm256_loadu_ps(a.add(i));
+            let b_chunck = _mm256_loadu_ps(b.add(i));
+            _mm256_storeu_ps(dst.add(i), _mm256_sub_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) - *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn mul_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 8 * 8;
+        for i in (0..chunks).step_by(8) {
+            let a_chunck = _mm256_loadu_ps(a.add(i));
+            let b_chunck = _mm256_loadu_ps(b.add(i));
+            _mm256_storeu_ps(dst.add(i), _mm256_mul_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) * *b.add(i);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn div_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
+    unsafe {
+        let chunks = n / 8 * 8;
+        for i in (0..chunks).step_by(8) {
+            let a_chunck = _mm256_loadu_ps(a.add(i));
+            let b_chunck = _mm256_loadu_ps(b.add(i));
+            _mm256_storeu_ps(dst.add(i), _mm256_div_ps(a_chunck, b_chunck));
+        }
+        for i in chunks..n {
+            *dst.add(i) = *a.add(i) / *b.add(i);
+        }
+    }
+}

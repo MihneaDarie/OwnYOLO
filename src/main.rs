@@ -7,7 +7,7 @@ use ndarray::{Array, Array4, Ix3};
 use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
 
 use crate::{
-    graph_form::{graph::GraphForm, typed_array::TypedArray},
+    graph_form::{graph::GraphForm, tensor_map::TensorMap, typed_array::TypedArray},
     yolo::{
         buffers::Buffers,
         context::appcontext::get_global_context,
@@ -73,7 +73,6 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
         &mut rgb,
         imgproc::COLOR_BGR2RGB,
         0,
-        AlgorithmHint::ALGO_HINT_ACCURATE,
     )?;
 
     let mut normalized = Mat::default();
@@ -168,14 +167,14 @@ fn main() -> Result<()> {
         .unwrap();
 
     //windows
-    // let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
-    // camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
-    // camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
-
-    //linux
-    let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
+    let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
     camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
     camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
+
+    //linux
+    // let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
+    // camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
+    // camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
 
     if !videoio::VideoCapture::is_opened(&camera)? {
         anyhow::bail!("Failed to open camera!");
@@ -184,7 +183,7 @@ fn main() -> Result<()> {
     let mut frame = Mat::default();
     let window_name = "YOLOv8 Object Detection (Press 'q' to exit)";
     highgui::named_window(window_name, highgui::WINDOW_NORMAL)?;
-    highgui::resize_window(window_name, 1000, 500)?;
+    highgui::resize_window(window_name, 500, 700)?;
 
     let conf_threshold = 0.25;
     let iou_threshold = 0.45;

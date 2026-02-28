@@ -1,9 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, panic::RefUnwindSafe};
 
-use crate::graph_form::{
-    nodes::{node::Node, unique_ids::UniqueId},
-    tensor_map::TensorMap,
-    typed_array::TypedArray,
+use crate::{
+    graph_form::{
+        nodes::{node::Node, unique_ids::UniqueId},
+        tensor_map::TensorMap,
+        typed_array::TypedArray,
+    },
+    yolo::gemms::gemm::add_maybe_simd,
 };
 use anyhow::Result;
 
@@ -78,7 +81,20 @@ impl<T: Default + 'static> Node<T> for AddNode<T> {
 
         match o {
             Some(out) => {
-                a.add(&b, out).unwrap();
+                if let (TypedArray::F32(a_arr), TypedArray::F32(b_arr), TypedArray::F32(o_arr)) =
+                    (a, b, &mut *out)
+                {
+                    if a_arr.shape() == b_arr.shape() {
+                        let a_sl = a_arr.as_slice_memory_order().unwrap();
+                        let b_sl = b_arr.as_slice_memory_order().unwrap();
+                        let dst = o_arr.as_slice_memory_order_mut().unwrap();
+                        add_maybe_simd(a_sl, b_sl, dst, a_sl.len());
+                    } else {
+                        a.add(&b, out).unwrap();
+                    }
+                } else {
+                    a.add(&b, out).unwrap();
+                }
             }
             _ => panic!("AddNode: missing input(s) - a={} b={}", self.a, self.b),
         }

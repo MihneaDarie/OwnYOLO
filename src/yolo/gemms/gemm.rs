@@ -8,8 +8,13 @@ use crate::yolo::gemms::mm512_gemm::gemm_bias_blocked_avx512;
 use crate::yolo::{
     context::appcontext::{Device, get_global_context},
     gemms::{
-        mm256_gemm::{apply_sigmoid_avx2, apply_silu_avx2, gemm_bias_blocked_avx2},
-        mm512_gemm::{apply_sigmoid_avx512, apply_silu_avx512},
+        mm256_gemm::{
+            add_avx2, apply_sigmoid_avx2, apply_silu_avx2, div_avx2, gemm_bias_blocked_avx2,
+            mul_avx2, sub_avx2,
+        },
+        mm512_gemm::{
+            add_avx512, apply_sigmoid_avx512, apply_silu_avx512, div_avx512, mul_avx512, sub_avx512,
+        },
     },
     utils::aprox_sigmoid_f32,
 };
@@ -101,6 +106,86 @@ pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
             dst.par_iter_mut()
                 .zip(src.par_iter())
                 .for_each(|(d, s)| *d = aprox_sigmoid_f32(*s));
+        }
+    }
+}
+
+pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
+    let dst_ptr_mut = dst.as_mut_ptr();
+    let sa_ptr = a.as_ptr();
+    let sb_ptr = b.as_ptr();
+
+    match get_global_context().get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { add_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => {
+            unsafe { add_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        _ => {
+            dst.par_iter_mut()
+                .zip(a.par_iter().zip(b.par_iter()))
+                .for_each(|(d, (a, b))| *d = *a + *b);
+        }
+    }
+}
+
+pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
+    let dst_ptr_mut = dst.as_mut_ptr();
+    let sa_ptr = a.as_ptr();
+    let sb_ptr = b.as_ptr();
+
+    match get_global_context().get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { sub_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => {
+            unsafe { sub_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        _ => {
+            dst.par_iter_mut()
+                .zip(a.par_iter().zip(b.par_iter()))
+                .for_each(|(d, (a, b))| *d = *a - *b);
+        }
+    }
+}
+
+pub fn mul_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
+    let dst_ptr_mut = dst.as_mut_ptr();
+    let sa_ptr = a.as_ptr();
+    let sb_ptr = b.as_ptr();
+
+    match get_global_context().get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { mul_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => {
+            unsafe { mul_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        _ => {
+            dst.par_iter_mut()
+                .zip(a.par_iter().zip(b.par_iter()))
+                .for_each(|(d, (a, b))| *d = *a * *b);
+        }
+    }
+}
+
+pub fn div_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
+    let dst_ptr_mut = dst.as_mut_ptr();
+    let sa_ptr = a.as_ptr();
+    let sb_ptr = b.as_ptr();
+
+    match get_global_context().get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { div_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => {
+            unsafe { div_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+        }
+        _ => {
+            dst.par_iter_mut()
+                .zip(a.par_iter().zip(b.par_iter()))
+                .for_each(|(d, (a, b))| *d = *a / *b);
         }
     }
 }
