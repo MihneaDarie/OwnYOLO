@@ -273,3 +273,63 @@ pub unsafe fn gemm_bias_blocked_avx2(
         }
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn sigmoid_avx2(x: __m256) -> __m256 {
+    let left_margin = _mm256_set1_ps(-4.0);
+    let right_margin = _mm256_set1_ps(4.0);
+    let zeros = _mm256_setzero_ps();
+    let quarter = _mm256_set1_ps(0.25);
+    let one_over_eight = _mm256_set1_ps(0.125);
+    let half = _mm256_set1_ps(0.5);
+
+    let abs_x = _mm256_andnot_ps(_mm256_set1_ps(-0.0), x);
+
+    // 0.25 * |x| * x * 0.125
+    let part1 = _mm256_mul_ps(
+        _mm256_mul_ps(quarter, _mm256_mul_ps(x, abs_x)),
+        one_over_eight,
+    );
+
+    //0.5 + 0.25 * x - part1
+    let part2 = _mm256_sub_ps(_mm256_add_ps(half, _mm256_mul_ps(quarter, x)), part1);
+
+    let mut result = _mm256_mul_ps(x, part2);
+
+    let mask_low = _mm256_cmp_ps(x, left_margin, _CMP_LT_OQ);
+    let mask_high = _mm256_cmp_ps(x, right_margin, _CMP_GT_OQ);
+
+    result = _mm256_blendv_ps(result, zeros, mask_low);
+
+    result = _mm256_blendv_ps(result, x, mask_high);
+
+    //silu = x * sig <=> sig = silu / x
+    result = _mm256_div_ps(result, x);
+
+    result
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn apply_silu_avx2(dst: *mut f32, src: *const f32, n: usize) {
+    unsafe {
+        for i in (0..n).step_by(8) {
+            let val = _mm256_loadu_ps(src.add(i));
+            let activated = silu_avx2(val);
+            _mm256_storeu_ps(dst.add(i), activated);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx2,fma")]
+pub unsafe fn apply_sigmoid_avx2(dst: *mut f32, src: *const f32, n: usize) {
+    unsafe {
+        for i in (0..n).step_by(8) {
+            let val = _mm256_loadu_ps(src.add(i));
+            let activated = sigmoid_avx2(val);
+            _mm256_storeu_ps(dst.add(i), activated);
+        }
+    }
+}

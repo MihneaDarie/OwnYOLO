@@ -1,6 +1,7 @@
 use crate::{
     graph_form::nodes::resize::Mode,
     yolo::{
+        gemms::gemm::{apply_sigmoid, apply_silu},
         utils::{
             Conv2D, aprox_sigmoid_f32, aprox_sigmoid_f64, conv_silu_into, sigmoid, silu_f32,
             silu_f64,
@@ -430,9 +431,7 @@ impl TypedArray {
             (TypedArray::F32(i), TypedArray::F32(o)) => {
                 let src = i.as_slice_memory_order().unwrap();
                 let dst = o.as_slice_memory_order_mut().unwrap();
-                dst.par_iter_mut()
-                    .zip(src.par_iter())
-                    .for_each(|(d, s)| *d = aprox_sigmoid_f32(*s));
+                apply_sigmoid(dst, src, i.len());
             }
             (TypedArray::F64(i), TypedArray::F64(o)) => {
                 let src = i.as_slice_memory_order().unwrap();
@@ -451,9 +450,7 @@ impl TypedArray {
             (TypedArray::F32(i), TypedArray::F32(o)) => {
                 let src = i.as_slice_memory_order().unwrap();
                 let dst = o.as_slice_memory_order_mut().unwrap();
-                dst.par_iter_mut()
-                    .zip(src.par_iter())
-                    .for_each(|(d, s)| *d = silu_f32(*s));
+                apply_silu(dst, src, i.len());
             }
             (TypedArray::F64(i), TypedArray::F64(o)) => {
                 let src = i.as_slice_memory_order().unwrap();

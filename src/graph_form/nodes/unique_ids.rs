@@ -18,7 +18,7 @@ pub enum UniqueId {
     //Activations
     Sigmoid,
     Silu,
-    
+
     #[default]
     Undefined,
 }

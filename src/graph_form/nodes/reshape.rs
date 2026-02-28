@@ -66,18 +66,15 @@ impl<T: Default + 'static> Node<T> for ReshapeNode<T> {
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
-fn get_unique_id_mut(&mut self) -> UniqueId {
+    fn get_unique_id_mut(&mut self) -> UniqueId {
         self.unique_id
     }
 
     fn take_next(&mut self) -> Option<Vec<Box<dyn Node<T>>>> {
-    self.next_node.take()
-}
-fn get_next_mut(&mut self) -> Option<Vec<&mut Box<dyn Node<T>>>> {
-        match self.next_node.as_mut() {
-            Some(list) => Some(list.iter_mut().collect()),
-            None => None,
-        }
+        self.next_node.take()
+    }
+    fn get_next_mut(&mut self) -> Option<&mut Vec<Box<dyn Node<T>>>> {
+        self.next_node.as_mut()
     }
 
     fn set_next(&mut self, next: Option<Vec<Box<dyn Node<T>>>>) {
@@ -88,11 +85,8 @@ fn get_next_mut(&mut self) -> Option<Vec<&mut Box<dyn Node<T>>>> {
         vec![self.o.clone()]
     }
 
-    fn get_next(&self) -> Option<Vec<&Box<dyn Node<T>>>> {
-        match &self.next_node {
-            Some(list) => Some(list.iter().collect()) ,
-            None => None,
-        }
+    fn get_next(&self) -> Option<&Vec<Box<dyn Node<T>>>> {
+        self.next_node.as_ref()
     }
 
     fn pass(&self, omap: &mut TensorMap) {
@@ -120,6 +114,9 @@ fn get_next_mut(&mut self) -> Option<Vec<&mut Box<dyn Node<T>>>> {
     }
 
     fn print(&self) {
+        if let Some(list) = &self.next_node {
+            print!("{}-", list.len());
+        }
         println!("reshape-{},{},{}", self.data, self.shape, self.o);
         if let Some(next) = &self.next_node {
             next.iter().for_each(|v| v.print());

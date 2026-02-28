@@ -394,3 +394,61 @@ pub unsafe fn gemm_bias_blocked_avx512(
         }
     }
 }
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn sigmoid_avx512(x: __m512) -> __m512 {
+    let left_margin = _mm512_set1_ps(-4.0);
+    let right_margin = _mm512_set1_ps(4.0);
+    let zeros = _mm512_setzero_ps();
+    let quarter = _mm512_set1_ps(0.25);
+    let one_over_eight = _mm512_set1_ps(0.125);
+    let half = _mm512_set1_ps(0.5);
+
+    let abs_x = unsafe { _mm512_andnot_ps(_mm512_set1_ps(-0.0), x) };
+
+    // 0.25 * |x| * x * 0.125
+    let part1 = _mm512_mul_ps(
+        _mm512_mul_ps(quarter, _mm512_mul_ps(x, abs_x)),
+        one_over_eight,
+    );
+
+    //0.5 + 0.25 * x - part1
+    let part2 = _mm512_sub_ps(_mm512_add_ps(half, _mm512_mul_ps(quarter, x)), part1);
+
+    let mut result = _mm512_mul_ps(x, part2);
+
+    let mask_low = _mm512_cmp_ps_mask(x, left_margin, _CMP_LT_OQ);
+    let mask_high = _mm512_cmp_ps_mask(x, right_margin, _CMP_GT_OQ);
+
+    result = _mm512_mask_mov_ps(result, mask_low, zeros);
+    result = _mm512_mask_mov_ps(result, mask_high, x);
+
+    result = _mm512_div_ps(result, x);
+
+    result
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn apply_silu_avx512(dst: *mut f32, src: *const f32, n: usize) {
+    unsafe {
+        for i in (0..n).step_by(16) {
+            let val = _mm512_loadu_ps(src.add(i));
+            let activated = silu_avx512(val);
+            _mm512_storeu_ps(dst.add(i), activated);
+        }
+    }
+}
+
+#[cfg(target_arch = "x86_64")]
+#[target_feature(enable = "avx512f,fma")]
+pub unsafe fn apply_sigmoid_avx512(dst: *mut f32, src: *const f32, n: usize) {
+    unsafe {
+        for i in (0..n).step_by(16) {
+            let val = _mm512_loadu_ps(src.add(i));
+            let activated = sigmoid_avx512(val);
+            _mm512_storeu_ps(dst.add(i), activated);
+        }
+    }
+}

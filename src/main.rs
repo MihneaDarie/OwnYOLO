@@ -155,8 +155,6 @@ fn draw_detections(
 fn main() -> Result<()> {
     let (mut graph, mut omap) = GraphForm::<f32>::from_onnx_file("models/yolov8n.onnx")?;
 
-    // graph.optimize_nodes();
-
     graph.print();
 
     // return Ok(());

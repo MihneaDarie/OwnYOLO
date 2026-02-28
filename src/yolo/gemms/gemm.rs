@@ -1,8 +1,17 @@
+use rayon::iter::{
+    IndexedParallelIterator as _, IntoParallelRefIterator, IntoParallelRefMutIterator,
+    ParallelIterator as _,
+};
+
 #[cfg(target_arch = "x86_64")]
 use crate::yolo::gemms::mm512_gemm::gemm_bias_blocked_avx512;
 use crate::yolo::{
     context::appcontext::{Device, get_global_context},
-    gemms::mm256_gemm::gemm_bias_blocked_avx2,
+    gemms::{
+        mm256_gemm::{apply_sigmoid_avx2, apply_silu_avx2, gemm_bias_blocked_avx2},
+        mm512_gemm::{apply_sigmoid_avx512, apply_silu_avx512},
+    },
+    utils::aprox_sigmoid_f32,
 };
 use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu_f32};
 
@@ -53,5 +62,45 @@ pub fn sgemm_bias_parallel(
             }
         }
     } else {
+    }
+}
+
+pub fn apply_silu(dst: &mut [f32], src: &[f32], n: usize) {
+    let context = get_global_context();
+    let dst_ptr = dst.as_mut_ptr();
+    let src_ptr = dst.as_ptr();
+
+    match context.get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { apply_silu_avx2(dst_ptr, src_ptr, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => unsafe {
+            apply_silu_avx512(dst_ptr, src_ptr, n);
+        },
+        _ => {
+            dst.par_iter_mut()
+                .zip(src.par_iter())
+                .for_each(|(d, s)| *d = aprox_sigmoid_f32(*s));
+        }
+    }
+}
+
+pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
+    let context = get_global_context();
+    let dst_ptr = dst.as_mut_ptr();
+    let src_ptr = src.as_ptr();
+
+    match context.get_gemm_type() {
+        crate::yolo::context::appcontext::GemmType::Avx2 => {
+            unsafe { apply_sigmoid_avx2(dst_ptr, src_ptr, n) };
+        }
+        crate::yolo::context::appcontext::GemmType::Avx512 => unsafe {
+            apply_sigmoid_avx512(dst_ptr, src_ptr, n);
+        },
+        _ => {
+            dst.par_iter_mut()
+                .zip(src.par_iter())
+                .for_each(|(d, s)| *d = aprox_sigmoid_f32(*s));
+        }
     }
 }

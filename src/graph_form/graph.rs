@@ -1,9 +1,11 @@
+use std::collections::{HashMap, HashSet};
+
 use crate::graph_form::{
     nodes::{
         add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, hash_trait::FromHashMap,
         max_pool::MaxPoolNode, mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode,
-        sigmoid::SigmoidNode, slice::SliceNode, soft_max::SoftMaxNode, split::SplitNode,
-        sub::SubNode, transpose::TransposeNode,
+        sigmoid::SigmoidNode, silu::SiluNode, slice::SliceNode, soft_max::SoftMaxNode,
+        split::SplitNode, sub::SubNode, transpose::TransposeNode, unique_ids::UniqueId,
     },
     tensor_map::TensorMap,
     typed_array::TypedArray,
@@ -14,7 +16,7 @@ use onnx_extractor::OnnxModel;
 
 pub struct GraphForm<T: Default> {
     // nodes: Vec<Box<dyn Node<T>>>,
-    nodes: Option<Box<dyn Node<T>>>,
+    nodes: Option<Vec<Box<dyn Node<T>>>>,
 }
 
 impl<T: Default + 'static> GraphForm<T> {
@@ -24,24 +26,32 @@ impl<T: Default + 'static> GraphForm<T> {
 
     pub fn insert(&mut self, node: Box<dyn Node<T>>) {
         if let Some(next) = &mut self.nodes {
-            next.insert(node).unwrap();
+            next[0].insert(node).unwrap();
         } else {
-            self.nodes = Some(node)
-        }
-    }
-
-    pub fn self_count(&self, count: usize) -> usize {
-        if let Some(next) = &self.nodes {
-            next.self_count(count + 1)
-        } else {
-            count
+            self.nodes = Some(vec![node])
         }
     }
 
     pub fn print(&self) {
-        println!("start!");
+        if let Some(list) = &self.nodes {
+            println!("{}", list.len());
+        }
         if let Some(next) = &self.nodes {
-            next.print();
+            next.iter().for_each(|v| v.print());
+        }
+    }
+
+    fn self_count(&self, count: usize) -> usize {
+        if let Some(next) = &self.nodes {
+            let mut ct = 0;
+            let mut sum = 0;
+            next.iter().for_each(|val| {
+                sum += val.self_count(ct);
+                ct += 1;
+            });
+            sum
+        } else {
+            count
         }
     }
 
@@ -174,17 +184,18 @@ impl<T: Default + 'static> GraphForm<T> {
         Ok((ret, map))
     }
 
-    pub fn optimize_nodes(&mut self) {
-        if let Some(node) = &mut self.nodes {
-            node.optimize_further();
-        }
+    pub fn rearange_for_parallel_branches(&mut self) {
+    }
+
+    pub fn optimize(&mut self) {
+       
     }
 
     pub fn pass(&self, omap: &mut TensorMap, input: &ArrayD<f32>) {
         omap.insert("images".to_string(), TypedArray::F32(input.clone()));
 
-        if let Some(next_node) = &self.nodes {
-            next_node.pass(omap);
+        if let Some(nodes) = &self.nodes {
+            nodes.iter().for_each(|val| val.pass(omap));
         }
     }
 }
