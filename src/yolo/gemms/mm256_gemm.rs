@@ -345,7 +345,7 @@ pub unsafe fn add_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
             _mm256_storeu_ps(dst.add(i), _mm256_add_ps(a_chunck, b_chunck));
         }
         for i in chunks..n {
-            *dst.add(i) = *a.add(i) + *b.add(i);
+            *dst.add(i) = *a
         }
     }
 }
@@ -361,7 +361,7 @@ pub unsafe fn sub_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
             _mm256_storeu_ps(dst.add(i), _mm256_sub_ps(a_chunck, b_chunck));
         }
         for i in chunks..n {
-            *dst.add(i) = *a.add(i) - *b.add(i);
+            *dst.add(i) = *a
         }
     }
 }
@@ -377,7 +377,7 @@ pub unsafe fn mul_avx2(a: *const f32, b: *const f32, dst: *mut f32, n: usize) {
             _mm256_storeu_ps(dst.add(i), _mm256_mul_ps(a_chunck, b_chunck));
         }
         for i in chunks..n {
-            *dst.add(i) = *a.add(i) * *b.add(i);
+            *dst.add(i) = *a
         }
     }
 }

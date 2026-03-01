@@ -1,6 +1,9 @@
-use rayon::iter::{
-    IndexedParallelIterator as _, IntoParallelRefIterator, IntoParallelRefMutIterator,
-    ParallelIterator as _,
+use rayon::{
+    iter::{
+        IndexedParallelIterator as _, IntoParallelRefIterator, IntoParallelRefMutIterator,
+        ParallelIterator as _,
+    },
+    slice::ParallelSliceMut,
 };
 
 #[cfg(target_arch = "x86_64")]
@@ -70,6 +73,8 @@ pub fn sgemm_bias_parallel(
     }
 }
 
+const CHUNK_SIZE: usize = 32_768;
+
 pub fn apply_silu(dst: &mut [f32], src: &[f32], n: usize) {
     let context = get_global_context();
     let dst_ptr = dst.as_mut_ptr();
@@ -91,17 +96,29 @@ pub fn apply_silu(dst: &mut [f32], src: &[f32], n: usize) {
 }
 
 pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
-    let context = get_global_context();
-    let dst_ptr = dst.as_mut_ptr();
-    let src_ptr = src.as_ptr();
-
-    match context.get_gemm_type() {
+    match get_global_context().get_gemm_type() {
         crate::yolo::context::appcontext::GemmType::Avx2 => {
-            unsafe { apply_sigmoid_avx2(dst_ptr, src_ptr, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        apply_sigmoid_avx2(dst_chunk.as_mut_ptr(), src.as_ptr().add(offset), len)
+                    };
+                });
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => unsafe {
-            apply_sigmoid_avx512(dst_ptr, src_ptr, n);
-        },
+        crate::yolo::context::appcontext::GemmType::Avx512 => {
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        apply_sigmoid_avx512(dst_chunk.as_mut_ptr(), src.as_ptr().add(offset), len)
+                    };
+                });
+        }
         _ => {
             dst.par_iter_mut()
                 .zip(src.par_iter())
@@ -111,16 +128,38 @@ pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
 }
 
 pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
-    let dst_ptr_mut = dst.as_mut_ptr();
-    let sa_ptr = a.as_ptr();
-    let sb_ptr = b.as_ptr();
-
     match get_global_context().get_gemm_type() {
         crate::yolo::context::appcontext::GemmType::Avx2 => {
-            unsafe { add_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        add_avx2(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         crate::yolo::context::appcontext::GemmType::Avx512 => {
-            unsafe { add_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        add_avx512(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         _ => {
             dst.par_iter_mut()
@@ -131,16 +170,38 @@ pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
 }
 
 pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
-    let dst_ptr_mut = dst.as_mut_ptr();
-    let sa_ptr = a.as_ptr();
-    let sb_ptr = b.as_ptr();
-
     match get_global_context().get_gemm_type() {
         crate::yolo::context::appcontext::GemmType::Avx2 => {
-            unsafe { sub_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        sub_avx2(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         crate::yolo::context::appcontext::GemmType::Avx512 => {
-            unsafe { sub_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        sub_avx512(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         _ => {
             dst.par_iter_mut()
@@ -151,16 +212,38 @@ pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
 }
 
 pub fn mul_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
-    let dst_ptr_mut = dst.as_mut_ptr();
-    let sa_ptr = a.as_ptr();
-    let sb_ptr = b.as_ptr();
-
     match get_global_context().get_gemm_type() {
         crate::yolo::context::appcontext::GemmType::Avx2 => {
-            unsafe { mul_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = i * CHUNK_SIZE;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        mul_avx2(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         crate::yolo::context::appcontext::GemmType::Avx512 => {
-            unsafe { mul_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
+            dst.par_chunks_mut(CHUNK_SIZE)
+                .enumerate()
+                .for_each(|(i, dst_chunk)| {
+                    let offset = CHUNK_SIZE * i;
+                    let len = dst_chunk.len();
+                    unsafe {
+                        mul_avx512(
+                            a.as_ptr().add(offset),
+                            b.as_ptr().add(offset),
+                            dst_chunk.as_mut_ptr(),
+                            len,
+                        )
+                    };
+                });
         }
         _ => {
             dst.par_iter_mut()
