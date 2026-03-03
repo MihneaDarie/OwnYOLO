@@ -9,9 +9,7 @@ use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
 use crate::{
     graph_form::{graph::GraphForm, tensor_map::TensorMap, typed_array::TypedArray},
     yolo::{
-        buffers::Buffers,
-        context::appcontext::get_global_context,
-        yolov8::{COCO_CLASSES, Detection, YoloV8},
+        buffers::Buffers, gemms::appcontext::get_global_context, yolov8::{COCO_CLASSES, Detection, YoloV8}
     },
 };
 

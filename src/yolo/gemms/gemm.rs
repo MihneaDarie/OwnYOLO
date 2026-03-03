@@ -8,18 +8,17 @@ use rayon::{
 
 #[cfg(target_arch = "x86_64")]
 use crate::yolo::gemms::mm512_gemm::gemm_bias_blocked_avx512;
-use crate::yolo::{gemms::mm512_gemm::gemm_bias_blocked_scalar, utils::silu_f32};
+use crate::yolo::{gemms::{appcontext::{Device, GemmType, get_global_context}, mm512_gemm::gemm_bias_blocked_scalar}, utils::silu_f32};
 use crate::{
     graph_form::nodes::unique_ids::Activation,
     yolo::{
-        context::appcontext::{Device, get_global_context},
         gemms::{
             mm256_gemm::{
-                add_avx2, apply_sigmoid_avx2, apply_sigmoid_avx2_from_src, apply_silu_avx2,
+                add_avx2, apply_sigmoid_avx2_from_src,
                 apply_silu_avx2_from_src, div_avx2, gemm_bias_blocked_avx2, mul_avx2, sub_avx2,
             },
             mm512_gemm::{
-                add_avx512, apply_sigmoid_avx512, apply_sigmoid_avx512_from_src, apply_silu_avx512,
+                add_avx512, apply_sigmoid_avx512_from_src,
                 apply_silu_avx512_from_src, div_avx512, mul_avx512, sub_avx512,
             },
         },
@@ -45,10 +44,10 @@ pub fn sgemm_bias_parallel(
 
     if context.get_device() == Device::Cpu {
         match context.get_gemm_type() {
-            crate::yolo::context::appcontext::GemmType::Avx2 => {
+            GemmType::Avx2 => {
                 unsafe { gemm_bias_blocked_avx2(m, n, k, a, b, bias, c, activation) };
             }
-            crate::yolo::context::appcontext::GemmType::Avx512 => {
+            GemmType::Avx512 => {
                 unsafe { gemm_bias_blocked_avx512(m, n, k, a, b, bias, c, activation) };
             }
             _ => {
@@ -67,10 +66,10 @@ pub fn apply_silu(dst: &mut [f32], src: &[f32], n: usize) {
     let src_ptr = src.as_ptr();
 
     match context.get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             unsafe { apply_silu_avx2_from_src(dst_ptr, src_ptr, n) };
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => unsafe {
+        GemmType::Avx512 => unsafe {
             apply_silu_avx512_from_src(dst_ptr, src_ptr, n);
         },
         _ => {
@@ -83,7 +82,7 @@ pub fn apply_silu(dst: &mut [f32], src: &[f32], n: usize) {
 
 pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
     match get_global_context().get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -98,7 +97,7 @@ pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
                     };
                 });
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => {
+        GemmType::Avx512 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -123,7 +122,7 @@ pub fn apply_sigmoid(dst: &mut [f32], src: &[f32], n: usize) {
 
 pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
     match get_global_context().get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -139,7 +138,7 @@ pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
                     };
                 });
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => {
+        GemmType::Avx512 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -165,7 +164,7 @@ pub fn add_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
 
 pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
     match get_global_context().get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -181,7 +180,7 @@ pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
                     };
                 });
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => {
+        GemmType::Avx512 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -207,7 +206,7 @@ pub fn sub_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
 
 pub fn mul_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
     match get_global_context().get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -223,7 +222,7 @@ pub fn mul_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
                     };
                 });
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => {
+        GemmType::Avx512 => {
             dst.par_chunks_mut(CHUNK_SIZE)
                 .enumerate()
                 .for_each(|(i, dst_chunk)| {
@@ -253,10 +252,10 @@ pub fn div_maybe_simd(a: &[f32], b: &[f32], dst: &mut [f32], n: usize) {
     let sb_ptr = b.as_ptr();
 
     match get_global_context().get_gemm_type() {
-        crate::yolo::context::appcontext::GemmType::Avx2 => {
+        GemmType::Avx2 => {
             unsafe { div_avx2(sa_ptr, sb_ptr, dst_ptr_mut, n) };
         }
-        crate::yolo::context::appcontext::GemmType::Avx512 => {
+        GemmType::Avx512 => {
             unsafe { div_avx512(sa_ptr, sb_ptr, dst_ptr_mut, n) };
         }
         _ => {

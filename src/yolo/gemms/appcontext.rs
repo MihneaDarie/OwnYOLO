@@ -32,25 +32,16 @@ impl Default for GemmType {
 #[derive(Default, Debug)]
 pub struct AppContext {
     device: Device,
-    cam_index: u8,
     gemm_type: GemmType,
 }
 
 impl AppContext {
-    fn new(device: Device, cam_index: u8, gemm_type: GemmType) -> Self {
-        Self {
-            device,
-            cam_index,
-            gemm_type,
-        }
+    fn new(device: Device, gemm_type: GemmType) -> Self {
+        Self { device, gemm_type }
     }
 
     pub fn get_device(&self) -> Device {
         self.device
-    }
-
-    pub fn get_cam_index(&self) -> u8 {
-        self.cam_index
     }
 
     pub fn get_gemm_type(&self) -> GemmType {
@@ -110,11 +101,6 @@ impl AppContext {
             }
 
             match flag.as_str() {
-                "--camera" | "-c" => {
-                    context.cam_index = value
-                        .parse::<u8>()
-                        .map_err(|_| format!("Invalid camera index: {}", value))?;
-                }
                 "--device" | "-d" => {
                     context.device = match value.to_lowercase().as_str() {
                         "cpu" => {
@@ -157,10 +143,6 @@ impl AppContext {
     }
 
     pub fn check_context_compatibility(&mut self) -> Result<(), String> {
-        if self.cam_index != 0 {
-            // vezi cum verifici camerele de pe pc
-        }
-
         if self.device == Device::Gpu && self.gemm_type != GemmType::None {
             return Err("Can't use cpu features on gpu !".to_string());
         }
