@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::graph_form::{
     nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
@@ -48,6 +48,10 @@ impl<T: Default> FromHashMap for ConcatNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for ConcatNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -78,7 +82,7 @@ impl<T: Default + 'static> Node<T> for ConcatNode<T> {
         self.next_node.as_ref()
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let arrays: Vec<&TypedArray> = self
             .inputs
             .iter()
@@ -106,10 +110,6 @@ impl<T: Default + 'static> Node<T> for ConcatNode<T> {
         let mut result = TypedArray::Undefined;
         TypedArray::concat(&refs, axis, &mut result).unwrap();
         omap.insert(self.o.clone(), result);
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
-        }
     }
 
     fn print(&self) {

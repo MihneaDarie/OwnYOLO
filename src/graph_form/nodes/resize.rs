@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::graph_form::{
     nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
@@ -224,6 +224,10 @@ impl<T: Default> ResizeNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for ResizeNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -254,7 +258,7 @@ impl<T: Default + 'static> Node<T> for ResizeNode<T> {
         vec![self.x.clone(), roi, scales, sizes]
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let empty = String::from("");
         let sizes = self.sizes.as_ref().unwrap_or(&empty);
         let scales = self.scales.as_ref().unwrap_or(&empty);
@@ -269,10 +273,6 @@ impl<T: Default + 'static> Node<T> for ResizeNode<T> {
                 x.resize(sizes, scales, &self.mode, result).unwrap();
             }
             None => panic!("ResizeNode: missing input x={}", self.x),
-        }
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

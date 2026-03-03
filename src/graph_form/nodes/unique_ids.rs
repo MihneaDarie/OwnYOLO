@@ -14,11 +14,20 @@ pub enum UniqueId {
     Split,
     Sub,
     Transpose,
-
-    //Activations
+    
+    //Activation
     Sigmoid,
     Silu,
 
     #[default]
     Undefined,
+}
+
+#[repr(u8)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Activation {
+    Sigmoid,
+    Silu,
+    #[default]
+    None,
 }

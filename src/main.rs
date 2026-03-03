@@ -73,6 +73,7 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
         &mut rgb,
         imgproc::COLOR_BGR2RGB,
         0,
+        AlgorithmHint::ALGO_HINT_ACCURATE,
     )?;
 
     let mut normalized = Mat::default();
@@ -154,6 +155,7 @@ fn draw_detections(
 fn main() -> Result<()> {
     let (mut graph, mut omap) = GraphForm::<f32>::from_onnx_file("models/yolov8n.onnx")?;
 
+    graph.optimize();
     graph.print();
 
     // return Ok(());
@@ -167,14 +169,14 @@ fn main() -> Result<()> {
         .unwrap();
 
     //windows
-    let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
-    camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
-    camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
-
-    //linux
-    // let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
+    // let mut camera = videoio::VideoCapture::new(0, videoio::CAP_ANY)?;
     // camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
     // camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
+
+    // linux
+    let mut camera = videoio::VideoCapture::from_file("/dev/video0", videoio::CAP_V4L2)?;
+    camera.set(videoio::CAP_PROP_FRAME_WIDTH, 720.0)?;
+    camera.set(videoio::CAP_PROP_FRAME_HEIGHT, 1280.0)?;
 
     if !videoio::VideoCapture::is_opened(&camera)? {
         anyhow::bail!("Failed to open camera!");

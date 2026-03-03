@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::graph_form::{
     nodes::{node::Node, unique_ids::UniqueId},
@@ -38,6 +38,10 @@ impl<T: Default> SigmoidNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for SigmoidNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+    
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -49,7 +53,7 @@ impl<T: Default + 'static> Node<T> for SigmoidNode<T> {
         self.next_node.as_ref()
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let [x, o] = omap.get_disjoint_mut([&self.x, &self.o]);
         let x = &*x.unwrap();
 
@@ -58,9 +62,6 @@ impl<T: Default + 'static> Node<T> for SigmoidNode<T> {
                 x.sigmoid(result).unwrap();
             }
             None => panic!("SigmoidNode: missing input {}", self.x),
-        }
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

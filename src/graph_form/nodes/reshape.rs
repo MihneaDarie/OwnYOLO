@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::graph_form::{
     nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
@@ -63,6 +63,10 @@ impl<T: Default> ReshapeNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for ReshapeNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -89,7 +93,7 @@ impl<T: Default + 'static> Node<T> for ReshapeNode<T> {
         self.next_node.as_ref()
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let [data, shape, result] = omap.get_disjoint_mut([&self.data, &self.shape, &self.o]);
         let data = &*data.unwrap();
         let shape = &*shape.unwrap();
@@ -102,10 +106,6 @@ impl<T: Default + 'static> Node<T> for ReshapeNode<T> {
                 "ReshapeNode: missing input(s) - data={} shape={}",
                 self.data, self.shape
             ),
-        }
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

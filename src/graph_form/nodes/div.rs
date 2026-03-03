@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::{
     graph_form::{
@@ -44,6 +44,10 @@ impl<T: Default> DivNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for DivNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -74,7 +78,8 @@ impl<T: Default + 'static> Node<T> for DivNode<T> {
         vec![self.a.clone(), self.b.clone()]
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) {
+        
         let [a, b, o] = omap.get_disjoint_mut([&self.a, &self.b, &self.o]);
         let a = &*a.unwrap();
         let b = &*b.unwrap();
@@ -97,10 +102,6 @@ impl<T: Default + 'static> Node<T> for DivNode<T> {
                 }
             }
             _ => panic!("DivNode: missing input(s) - a={} b={}", self.a, self.b),
-        }
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

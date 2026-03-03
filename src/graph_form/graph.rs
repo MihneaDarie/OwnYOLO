@@ -2,10 +2,23 @@ use std::collections::{HashMap, HashSet};
 
 use crate::graph_form::{
     nodes::{
-        add::AddNode, concat::ConcatNode, conv::ConvNode, div::DivNode, hash_trait::FromHashMap,
-        max_pool::MaxPoolNode, mul::MulNode, node::Node, reshape::ReshapeNode, resize::ResizeNode,
-        sigmoid::SigmoidNode, silu::SiluNode, slice::SliceNode, soft_max::SoftMaxNode,
-        split::SplitNode, sub::SubNode, transpose::TransposeNode, unique_ids::UniqueId,
+        add::AddNode,
+        concat::ConcatNode,
+        conv::ConvNode,
+        div::DivNode,
+        hash_trait::FromHashMap,
+        max_pool::MaxPoolNode,
+        mul::MulNode,
+        node::Node,
+        reshape::ReshapeNode,
+        resize::ResizeNode,
+        sigmoid::SigmoidNode,
+        slice::SliceNode,
+        soft_max::SoftMaxNode,
+        split::SplitNode,
+        sub::SubNode,
+        transpose::TransposeNode,
+        unique_ids::{Activation, UniqueId},
     },
     tensor_map::TensorMap,
     typed_array::TypedArray,
@@ -58,6 +71,12 @@ impl<T: Default + 'static> GraphForm<T> {
     pub fn load_data_arrays(onnx: &OnnxModel) -> TensorMap {
         let mut map = TensorMap::new();
 
+        onnx.operations.iter().for_each(|s| {
+            s.outputs.iter().for_each(|out| {
+                map.insert(out.to_string(), TypedArray::Undefined);
+            });
+        });
+
         onnx.tensor_names().iter().for_each(|t| {
             if let Some(tensor) = onnx.get_tensor(t) {
                 let typed = if tensor.data().is_ok() {
@@ -74,7 +93,6 @@ impl<T: Default + 'static> GraphForm<T> {
 
     pub fn from_onnx_file(onnx_file_path: &str) -> anyhow::Result<(Self, TensorMap)> {
         let onnx = OnnxModel::load_from_file(onnx_file_path)?;
-
         let mut ret = Self::new();
         let map = Self::load_data_arrays(&onnx);
 
@@ -102,6 +120,7 @@ impl<T: Default + 'static> GraphForm<T> {
                     ret.insert(Box::new(conv));
                 }
                 "Resize" => {
+                    println!("{:?}",elem.attributes);
                     let inputs = &elem.inputs;
                     let roi = inputs.get(1).filter(|s| !s.is_empty()).cloned();
                     let scales = inputs.get(2).filter(|s| !s.is_empty()).cloned();
@@ -184,11 +203,37 @@ impl<T: Default + 'static> GraphForm<T> {
         Ok((ret, map))
     }
 
-    pub fn rearange_for_parallel_branches(&mut self) {
-    }
+    pub fn rearange_for_parallel_branches(&mut self) {}
 
     pub fn optimize(&mut self) {
-       
+        let mut convs: HashSet<String> = HashSet::new();
+        let mut sigmoids: HashMap<String, String> = HashMap::new();
+        let mut fuse_targets: HashMap<String, String> = HashMap::new();
+        let mut mul_to_remove: HashSet<String> = HashSet::new();
+
+        let mut conv_to_mul: HashMap<String, String> = HashMap::new();
+
+        if let Some(nodes) = &self.nodes {
+            collect(
+                nodes,
+                &mut convs,
+                &mut sigmoids,
+                &mut fuse_targets,
+                &mut mul_to_remove,
+            );
+        }
+
+        for (conv_out, sigmoid_out) in &sigmoids {
+            if let Some(mul_out) = fuse_targets.get(sigmoid_out) {
+                conv_to_mul.insert(conv_out.clone(), mul_out.clone());
+            }
+        }
+
+        if !fuse_targets.is_empty() {
+            if let Some(nodes) = &mut self.nodes {
+                apply(nodes, &conv_to_mul, &fuse_targets, &mul_to_remove);
+            }
+        }
     }
 
     pub fn pass(&self, omap: &mut TensorMap, input: &ArrayD<f32>) {
@@ -197,5 +242,89 @@ impl<T: Default + 'static> GraphForm<T> {
         if let Some(nodes) = &self.nodes {
             nodes.iter().for_each(|val| val.pass(omap));
         }
+    }
+}
+
+fn collect<T: Default + 'static>(
+    nodes: &[Box<dyn Node<T>>],
+    convs: &mut HashSet<String>,
+    sigmoids: &mut HashMap<String, String>,
+    fuse_targets: &mut HashMap<String, String>,
+    mul_to_remove: &mut HashSet<String>,
+) {
+    for node in nodes {
+        match node.get_unique_id() {
+            UniqueId::Conv => {
+                convs.insert(node.output_names()[0].clone());
+            }
+            UniqueId::Sigmoid => {
+                let inp = node.input_names()[0].clone();
+                if convs.contains(&inp) {
+                    sigmoids.insert(inp, node.output_names()[0].clone());
+                }
+            }
+            UniqueId::Mul => {
+                let inputs = node.input_names();
+                for (conv_out, sigmoid_out) in sigmoids.iter() {
+                    if inputs.contains(&conv_out) && inputs.contains(&sigmoid_out) {
+                        let mul_out = node.output_names()[0].clone();
+                        fuse_targets.insert(sigmoid_out.clone(), mul_out.clone());
+                        mul_to_remove.insert(mul_out);
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        if let Some(children) = node.get_next() {
+            collect(children, convs, sigmoids, fuse_targets, mul_to_remove);
+        }
+    }
+}
+
+fn apply<T: Default + 'static>(
+    nodes: &mut [Box<dyn Node<T>>],
+    conv_to_mul: &HashMap<String, String>,
+    fuse_targets: &HashMap<String, String>,
+    mul_to_remove: &HashSet<String>,
+) {
+    for node in nodes.iter_mut() {
+        if node.get_unique_id() == UniqueId::Conv {
+            let conv_out = node.output_names()[0].clone();
+            if let Some(mul_out) = conv_to_mul.get(&conv_out) {
+                if let Some(conv) = node.as_any_mut().downcast_mut::<ConvNode<T>>() {
+                    conv.set_activation(Activation::Silu);
+                    conv.add_output_strings(mul_out.clone());
+                }
+            }
+        }
+
+        let mut children = match node.take_next() {
+            Some(c) => c,
+            None => continue,
+        };
+
+        let mut i = 0;
+        while i < children.len() {
+            let uid = children[i].get_unique_id();
+            let out = children[i].output_names()[0].clone();
+
+            let should_remove = (uid == UniqueId::Sigmoid && fuse_targets.contains_key(&out))
+                || (uid == UniqueId::Mul && mul_to_remove.contains(&out));
+
+            if should_remove {
+                let mut removed = children.remove(i);
+                if let Some(grandchildren) = removed.take_next() {
+                    for (j, gc) in grandchildren.into_iter().enumerate() {
+                        children.insert(i + j, gc);
+                    }
+                }
+            } else {
+                i += 1;
+            }
+        }
+
+        apply(&mut children, conv_to_mul, fuse_targets, mul_to_remove);
+        node.set_next(Some(children));
     }
 }

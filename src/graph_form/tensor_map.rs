@@ -51,3 +51,17 @@ impl TensorMap {
         self.inner.iter()
     }
 }
+
+
+pub struct UnsafeSendMut<T>(pub *mut T);
+unsafe impl<T> Send for UnsafeSendMut<T> {}
+unsafe impl<T> Sync for UnsafeSendMut<T> {}
+
+impl<T> UnsafeSendMut<T> {
+    pub unsafe fn as_mut(&self) -> &mut T {
+        unsafe { &mut *self.0 }
+    }
+    pub unsafe fn as_ref(&self) -> &T {
+        unsafe { &*self.0 }
+    }
+}

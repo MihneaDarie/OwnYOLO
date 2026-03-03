@@ -1,8 +1,12 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::{
     graph_form::{
-        nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
+        nodes::{
+            hash_trait::FromHashMap,
+            node::Node,
+            unique_ids::{Activation, UniqueId},
+        },
         tensor_map::TensorMap,
         typed_array::TypedArray,
     },
@@ -38,6 +42,8 @@ pub struct ConvNode<T: Default> {
     b: Option<String>,
 
     o: String,
+
+    activation: Activation,
 
     unique_id: UniqueId,
 
@@ -124,6 +130,7 @@ impl<T: Default> FromHashMap for ConvNode<T> {
                 }
             },
             unique_id: UniqueId::Conv,
+            activation: Activation::None,
             next_node: None,
         })
     }
@@ -137,6 +144,7 @@ impl<T: Default> ConvNode<T> {
         pads: Vec<usize>,
         strides: Vec<usize>,
         dilations: Vec<usize>,
+        activation: Activation,
     ) -> Self {
         Self {
             x: String::new(),
@@ -151,6 +159,7 @@ impl<T: Default> ConvNode<T> {
             dilations,
             unique_id: UniqueId::Conv,
             next_node: None,
+            activation: activation,
         }
     }
 
@@ -163,9 +172,17 @@ impl<T: Default> ConvNode<T> {
     pub fn add_output_strings(&mut self, o: String) {
         self.o = o;
     }
+
+    pub fn set_activation(&mut self, activation: Activation) {
+        self.activation = activation;
+    }
 }
 
 impl<T: Default + 'static> Node<T> for ConvNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -197,7 +214,7 @@ impl<T: Default + 'static> Node<T> for ConvNode<T> {
         self.next_node.as_ref()
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let def = &String::from("");
         let b = self.b.as_ref().unwrap_or(def);
 
@@ -215,13 +232,9 @@ impl<T: Default + 'static> Node<T> for ConvNode<T> {
                     pad: self.pads.first().copied().unwrap_or(0) as usize,
                     stride: self.strides.first().copied().unwrap_or(1) as usize,
                 };
-                x.conv(&w, b, &cfg, result, false).unwrap();
+                x.conv(&w, b, &cfg, result, self.activation).unwrap();
             }
             _ => panic!("ConvNode: missing input(s) - x={} w={}", self.x, self.w),
-        }
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

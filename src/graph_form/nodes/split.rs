@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{any::Any, collections::HashMap};
 
 use crate::graph_form::{
     nodes::{hash_trait::FromHashMap, node::Node, unique_ids::UniqueId},
@@ -71,6 +71,10 @@ impl<T: Default> SplitNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for SplitNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -82,7 +86,7 @@ impl<T: Default + 'static> Node<T> for SplitNode<T> {
         self.next_node.as_ref()
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let input = omap.get(&self.input);
 
         let split_sizes: Vec<i64> = if let Some(TypedArray::I64(a)) = omap.get(&self.split) {
@@ -111,10 +115,6 @@ impl<T: Default + 'static> Node<T> for SplitNode<T> {
                 }
             }
             None => panic!("SplitNode: missing input {}", self.input),
-        }
-
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 

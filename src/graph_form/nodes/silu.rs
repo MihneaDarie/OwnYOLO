@@ -1,3 +1,5 @@
+use std::any::Any;
+
 use crate::graph_form::{
     nodes::{node::Node, unique_ids::UniqueId},
     tensor_map::TensorMap,
@@ -26,6 +28,10 @@ impl<T: Default> SiluNode<T> {
 }
 
 impl<T: Default + 'static> Node<T> for SiluNode<T> {
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
     fn get_unique_id(&self) -> UniqueId {
         self.unique_id
     }
@@ -90,7 +96,7 @@ impl<T: Default + 'static> Node<T> for SiluNode<T> {
         vec![self.o.clone()]
     }
 
-    fn pass(&self, omap: &mut TensorMap) {
+    fn execute(&self, omap: &mut TensorMap) { 
         let [x, o] = omap.get_disjoint_mut([&self.x, &self.o]);
         let x = &*x.unwrap();
 
@@ -99,9 +105,6 @@ impl<T: Default + 'static> Node<T> for SiluNode<T> {
                 x.silu(result).unwrap();
             }
             None => panic!("SiluNode: missing input {}", self.x),
-        }
-        if let Some(next) = &self.next_node {
-            next.iter().for_each(|val| val.pass(omap));
         }
     }
 }

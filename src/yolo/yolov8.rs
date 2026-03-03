@@ -1,10 +1,13 @@
-use crate::yolo::{
-    buffers::*,
-    gemms::gemm::sgemm_bias_parallel,
-    utils::{Conv2D, c2f_into, conv_silu_into, sigmoid},
+use crate::{
+    graph_form::nodes::unique_ids::Activation,
+    yolo::{
+        buffers::*,
+        gemms::gemm::sgemm_bias_parallel,
+        utils::{Conv2D, c2f_into, conv_silu_into, sigmoid},
+    },
 };
 use anyhow::Result;
-use ndarray::{Array1, Array3, Array4, ArrayD};
+use ndarray::{Array1, Array3, Array4, ArrayD, ArrayView4, ArrayViewMut4};
 use ndarray_npy::NpzReader;
 use rayon::{
     iter::{
@@ -313,7 +316,7 @@ impl YoloV8 {
             self.weights.model_0.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_0_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
         conv_silu_into(
             &buffers.model_0_buffer.conv_out.view(),
@@ -321,7 +324,7 @@ impl YoloV8 {
             self.weights.model_1.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_1_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         c2f_into(
@@ -329,6 +332,7 @@ impl YoloV8 {
             &self.weights.model_2,
             &mut buffers.model_2_buffer,
             true,
+            Activation::Silu,
         )?;
 
         conv_silu_into(
@@ -337,7 +341,7 @@ impl YoloV8 {
             self.weights.model_3.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_3_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         c2f_into(
@@ -345,6 +349,7 @@ impl YoloV8 {
             &self.weights.model_4,
             &mut buffers.model_4_buffer,
             true,
+            Activation::Silu,
         )?;
 
         conv_silu_into(
@@ -353,7 +358,7 @@ impl YoloV8 {
             self.weights.model_5.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_5_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         c2f_into(
@@ -361,6 +366,7 @@ impl YoloV8 {
             &self.weights.model_6,
             &mut buffers.model_6_buffer,
             true,
+            Activation::Silu,
         )?;
 
         conv_silu_into(
@@ -369,7 +375,7 @@ impl YoloV8 {
             self.weights.model_7.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_7_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         c2f_into(
@@ -377,6 +383,7 @@ impl YoloV8 {
             &self.weights.model_8,
             &mut buffers.model_8_buffer,
             true,
+            Activation::Silu,
         )?;
 
         self.sppf_into(
@@ -402,6 +409,7 @@ impl YoloV8 {
             &self.weights.model_12,
             &mut buffers.model_12_buffer,
             false,
+            Activation::Silu,
         )?;
 
         upsample_2x(
@@ -420,6 +428,7 @@ impl YoloV8 {
             &self.weights.model_15,
             &mut buffers.model_15_buffer,
             false,
+            Activation::Silu,
         )?;
 
         conv_silu_into(
@@ -428,7 +437,7 @@ impl YoloV8 {
             self.weights.model_16.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_16_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
         concat_channels(
             &buffers.model_16_buffer.conv_out,
@@ -440,6 +449,7 @@ impl YoloV8 {
             &self.weights.model_18,
             &mut buffers.model_18_buffer,
             false,
+            Activation::Silu,
         )?;
 
         conv_silu_into(
@@ -448,7 +458,7 @@ impl YoloV8 {
             self.weights.model_19.conv_bias.as_ref().map(|a| a.view()),
             &CONV_3X3_S2,
             &mut buffers.model_19_buffer.conv_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         concat_channels(
@@ -462,6 +472,7 @@ impl YoloV8 {
             &self.weights.model_21,
             &mut buffers.model_21_buffer,
             false,
+            Activation::Silu,
         )?;
         let input0 = &buffers.model_15_buffer.last;
         let input1 = &buffers.model_18_buffer.last;
@@ -573,7 +584,7 @@ impl YoloV8 {
                     cv2_block.conv0.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
                     &mut cv2_0_out.view_mut(),
-                    false,
+                    Activation::Silu,
                 )?;
 
                 conv_silu_into(
@@ -582,7 +593,7 @@ impl YoloV8 {
                     cv2_block.conv1.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
                     &mut cv2_1_out.view_mut(),
-                    false,
+                    Activation::Silu,
                 )?;
 
                 conv_linear_into(
@@ -590,6 +601,7 @@ impl YoloV8 {
                     &cv2_block.conv2.weight,
                     cv2_block.conv2.bias.as_ref(),
                     bbox_out,
+                    Activation::Silu,
                 )?;
                 Ok(())
             },
@@ -600,7 +612,7 @@ impl YoloV8 {
                     cv3_block.conv0.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
                     &mut cv3_0_out.view_mut(),
-                    false,
+                    Activation::Silu,
                 )?;
 
                 conv_silu_into(
@@ -609,7 +621,7 @@ impl YoloV8 {
                     cv3_block.conv1.conv_bias.as_ref().map(|a| a.view()),
                     &CONV_3X3_S1,
                     &mut cv3_1_out.view_mut(),
-                    false,
+                    Activation::Silu,
                 )?;
 
                 conv_linear_into(
@@ -617,6 +629,7 @@ impl YoloV8 {
                     &cv3_block.conv2.weight,
                     cv3_block.conv2.bias.as_ref(),
                     class_out,
+                    Activation::Silu,
                 )?;
                 Ok(())
             },
@@ -660,11 +673,11 @@ impl YoloV8 {
             weights.cv1.conv_bias.as_ref().map(|a| a.view()),
             &CONV_1X1_S1,
             &mut buf.cv1_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
-        maxpool_5x5(&buf.cv1_out, &mut buf.pool_1);
-        maxpool_5x5(&buf.pool_1, &mut buf.pool_2);
-        maxpool_5x5(&buf.pool_2, &mut buf.pool_3);
+        maxpool_5x5(&buf.cv1_out.view(), &mut buf.pool_1.view_mut());
+        maxpool_5x5(&buf.pool_1.view(), &mut buf.pool_2.view_mut());
+        maxpool_5x5(&buf.pool_2.view(), &mut buf.pool_3.view_mut());
 
         concat_4_channels(
             &buf.cv1_out,
@@ -680,7 +693,7 @@ impl YoloV8 {
             weights.cv2.conv_bias.as_ref().map(|a| a.view()),
             &CONV_1X1_S1,
             &mut buf.cv2_out.view_mut(),
-            false,
+            Activation::Silu,
         )?;
 
         Ok(())
@@ -844,7 +857,7 @@ fn concat_4_channels(
         .copy_from_slice(&d.as_slice_memory_order().unwrap()[..cd * hw]);
 }
 
-pub fn maxpool_5x5(input: &Array4<f32>, output: &mut Array4<f32>) {
+pub fn maxpool_5x5(input: &ArrayView4<f32>, output: &mut ArrayViewMut4<f32>) {
     let (_, _, h, w) = input.dim();
 
     let in_sl = input.as_slice_memory_order().unwrap();
@@ -919,6 +932,7 @@ pub fn conv_linear_into(
     w: &Array4<f32>,
     bias: Option<&Array1<f32>>,
     out: &mut Array4<f32>,
+    activation: Activation,
 ) -> Result<()> {
     let (_, cin, h, wout_dim) = x.dim();
     let (cout, _, _, _) = w.dim();
@@ -929,6 +943,6 @@ pub fn conv_linear_into(
     let out_sl = out.as_slice_memory_order_mut().unwrap();
     let bias_slice = bias.map(|b| b.as_slice().unwrap());
 
-    sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, false);
+    sgemm_bias_parallel(cout, hw, cin, ws, xs, bias_slice, out_sl, activation);
     Ok(())
 }

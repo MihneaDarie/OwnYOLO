@@ -1,5 +1,5 @@
 use crate::{
-    graph_form::nodes::resize::Mode,
+    graph_form::nodes::{resize::Mode, unique_ids::Activation},
     yolo::{
         gemms::gemm::{apply_sigmoid, apply_silu},
         utils::{
@@ -112,11 +112,10 @@ impl TypedArray {
             if kh == 5 && kw == 5 && sh == 1 && sw == 1 && ph == 2 && pw == 2 && dh == 1 && dw == 1
             {
                 let x4 = x.view().into_dimensionality::<Ix4>()?;
-                let x4 = x4.as_standard_layout();
-                let (batch, channels, hin, win) = x4.dim();
-                let mut out = Array4::<f32>::zeros((batch, channels, hin, win));
-                maxpool_5x5(&x4.to_owned(), &mut out);
-                *o = TypedArray::F32(out.into_dyn());
+                if let TypedArray::F32(o) = o {
+                    let mut out4 = o.view_mut().into_dimensionality::<Ix4>()?;
+                    maxpool_5x5(&x4, &mut out4);
+                }
                 return Ok(());
             }
         }
@@ -533,7 +532,7 @@ impl TypedArray {
         bias: Option<&TypedArray>,
         cfg: &Conv2D,
         o: &mut TypedArray,
-        use_silu: bool,
+        activation: Activation,
     ) -> anyhow::Result<()> {
         match (self, w, o) {
             (TypedArray::F32(x), TypedArray::F32(w), TypedArray::F32(o)) => {
@@ -548,7 +547,7 @@ impl TypedArray {
                     })
                     .transpose()?;
 
-                conv_silu_into(&x4, &w4, bias, cfg, &mut out, use_silu)?;
+                conv_silu_into(&x4, &w4, bias, cfg, &mut out, activation)?;
                 Ok(())
             }
             (TypedArray::Undefined, _, _)
