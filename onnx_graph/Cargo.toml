@@ -1,0 +1,21 @@
+[package]
+name = "onnx_graph"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rayon = "1.11.0"
+anyhow = "1.0.100"
+ndarray = { version = "0.17.1", features = ["rayon"] }
+onnx-extractor = "0.3.3"
+rust_gemm = { path = "../rust_gemm" }
+
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+
+[lints]
+workspace = true

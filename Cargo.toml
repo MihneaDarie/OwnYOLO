@@ -1,20 +1,12 @@
-[package]
-name = "yl"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
 
-[dependencies]
-anyhow = "1.0.100"
-ndarray = { version = "0.17.1", features = ["rayon"] }
-rayon = "1.10"
-rand = "0.8"
-ndarray-npy = "0.10.0"
-opencv = "0.97.2"
-base64 = "0.22.1"
-onnx-extractor = "0.3.3"
+members = [
+  "yolo_inference",
+  "rust_gemm",
+  "onnx_graph"
+]
 
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-panic = "abort"
+[workspace.lints.clippy]
+module_inception = "allow"
+new_without_default = "allow"
