@@ -5,7 +5,7 @@ use onnx_graph::nodes::conv::Conv2D;
 use onnx_graph::typed_array::TypedArray;
 use rayon::prelude::*;
 use saker_rs::activations::Activation;
-use saker_rs::gemms::operations::sgemm_bias_parallel;
+use saker_rs::linarg::operations::sgemm_bias_parallel;
 
 
 use super::buffers::C2FBuffer;

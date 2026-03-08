@@ -6,7 +6,7 @@ use crate::{
     typed_array::TypedArray,
 };
 use anyhow::Result;
-use saker_rs::gemms::operations::sub_maybe_simd;
+use saker_rs::linarg::operations::sub_maybe_simd;
 
 #[derive(Default)]
 pub struct SubNode<T: Default> {

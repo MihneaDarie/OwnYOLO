@@ -13,7 +13,7 @@ use rayon::{
     join,
     slice::ParallelSliceMut,
 };
-use saker_rs::{activations::Activation, gemms::operations::sgemm_bias_parallel};
+use saker_rs::{activations::Activation, linarg::operations::sgemm_bias_parallel};
 use std::{cell::RefCell, fs::File};
 
 pub const COCO_CLASSES: [&str; 80] = [

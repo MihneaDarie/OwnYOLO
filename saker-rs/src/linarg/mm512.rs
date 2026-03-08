@@ -6,7 +6,7 @@ use std::arch::x86_64::*;
 use crate::activations::Activation;
 #[cfg(target_arch = "x86_64")]
 use crate::{
-    accumulate_simd, fmadd_ps_simd, gemms::utils::aprox_silu_f32, set_zero_simd, set1_ps_simd,
+    accumulate_simd, fmadd_ps_simd, linarg::utils::aprox_silu_f32, set_zero_simd, set1_ps_simd,
     storeu_ps_simd,
 };
 

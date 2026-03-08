@@ -9,10 +9,10 @@ use rayon::iter::IntoParallelRefIterator;
 use rayon::iter::IntoParallelRefMutIterator;
 use rayon::iter::ParallelIterator;
 use rayon::{iter::IndexedParallelIterator, slice::ParallelSliceMut};
-use saker_rs::gemms::operations::sgemm_bias_parallel;
+use saker_rs::linarg::operations::sgemm_bias_parallel;
 use saker_rs::{
     activations::Activation,
-    gemms::operations::{apply_sigmoid, apply_silu},
+    linarg::operations::{apply_sigmoid, apply_silu},
 };
 
 thread_local! {

@@ -5,13 +5,9 @@ use anyhow::{Ok, Result};
 use ndarray::{Array, Array4, Ix3};
 use onnx_graph::{graph::GraphForm, typed_array::TypedArray};
 use opencv::{core::*, highgui, imgproc, prelude::*, videoio};
-use saker_rs::gemms::appcontext::get_global_context;
+use saker_rs::appcontext::get_global_context;
 
-use crate::{
-    yolo::
-        yolov8::{COCO_CLASSES, Detection}
-    ,
-};
+use crate::yolo::yolov8::{COCO_CLASSES, Detection};
 
 const COLORS: [VecN<f64, 4>; 8] = [
     Scalar::new(255.0, 0.0, 0.0, 0.0),
@@ -66,12 +62,7 @@ fn preprocess_image(frame: &Mat) -> Result<(Array4<f32>, f32, f32, f32)> {
 
     let mut rgb = Mat::default();
 
-    imgproc::cvt_color(
-        &padded,
-        &mut rgb,
-        imgproc::COLOR_BGR2RGB,
-        0,
-    )?;
+    imgproc::cvt_color(&padded, &mut rgb, imgproc::COLOR_BGR2RGB, 0)?;
 
     let mut normalized = Mat::default();
     rgb.convert_to(&mut normalized, CV_32F, 1.0 / 255.0, 0.0)?;
@@ -150,7 +141,8 @@ fn draw_detections(
 }
 
 fn main() -> Result<()> {
-    let (mut graph, mut omap) = GraphForm::<f32>::from_onnx_file("yolo_inference/models/yolov8n.onnx")?;
+    let (mut graph, mut omap) =
+        GraphForm::<f32>::from_onnx_file("yolo_inference/models/yolov8n.onnx")?;
 
     graph.optimize();
     graph.print();

@@ -1,2 +1,3 @@
 pub mod activations;
-pub mod gemms;
+pub mod appcontext;
+pub mod linarg;
