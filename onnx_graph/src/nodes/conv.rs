@@ -14,7 +14,7 @@ pub struct Conv2D {
 
 use anyhow::{Ok, Result};
 use onnx_extractor::AttributeValue;
-use rust_gemm::activations::Activation;
+use saker_rs::activations::Activation;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum AutoPad {

@@ -10,7 +10,6 @@ pub fn aprox_silu_f32(x: f32) -> f32 {
     }
 }
 
-
 #[inline(always)]
 pub fn aprox_silu_f64(x: f64) -> f64 {
     if x < -4.0 {
@@ -22,7 +21,6 @@ pub fn aprox_silu_f64(x: f64) -> f64 {
         x * (0.5 + a * x - a * x.abs() * x / 8.0)
     }
 }
-
 
 #[inline(always)]
 pub fn aprox_sigmoid_f32(x: f32) -> f32 {

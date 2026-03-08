@@ -6,7 +6,7 @@ use crate::{
     typed_array::TypedArray,
 };
 use anyhow::Result;
-use rust_gemm::gemms::gemm::mul_maybe_simd;
+use saker_rs::gemms::operations::mul_maybe_simd;
 
 #[derive(Default)]
 pub struct MulNode<T: Default> {

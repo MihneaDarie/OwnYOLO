@@ -11,7 +11,7 @@ rand = "0.8"
 ndarray-npy = "0.10.0"
 opencv = "0.97.2"
 base64 = "0.22.1"
-rust_gemm = { path = "../rust_gemm" }
+saker-rs = { path = "../saker-rs" }
 onnx_graph = { path = "../onnx_graph" }
 
 [profile.release]

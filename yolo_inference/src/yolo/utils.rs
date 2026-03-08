@@ -4,8 +4,8 @@ use ndarray::{Array1, Array4, ArrayView1, ArrayView4, ArrayViewMut4};
 use onnx_graph::nodes::conv::Conv2D;
 use onnx_graph::typed_array::TypedArray;
 use rayon::prelude::*;
-use rust_gemm::activations::Activation;
-use rust_gemm::gemms::gemm::sgemm_bias_parallel;
+use saker_rs::activations::Activation;
+use saker_rs::gemms::operations::sgemm_bias_parallel;
 
 
 use super::buffers::C2FBuffer;

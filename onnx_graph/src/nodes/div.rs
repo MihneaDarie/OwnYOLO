@@ -6,7 +6,7 @@ use crate::{
     typed_array::TypedArray,
 };
 use anyhow::Result;
-use rust_gemm::gemms::gemm::div_maybe_simd;
+use saker_rs::gemms::operations::div_maybe_simd;
 
 #[derive(Default)]
 pub struct DivNode<T: Default> {

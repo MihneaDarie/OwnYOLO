@@ -13,7 +13,7 @@ use crate::{
 use anyhow::Ok;
 use ndarray::ArrayD;
 use onnx_extractor::OnnxModel;
-use rust_gemm::activations::Activation;
+use saker_rs::activations::Activation;
 
 pub struct GraphForm<T: Default> {
     // nodes: Vec<Box<dyn Node<T>>>,

@@ -6,7 +6,7 @@ use crate::{nodes::{node::Node, unique_ids::UniqueId},
         typed_array::TypedArray};
 
 use anyhow::Result;
-use rust_gemm::gemms::gemm::add_maybe_simd;
+use saker_rs::gemms::operations::add_maybe_simd;
 
 #[derive(Default)]
 pub struct AddNode<T: Default> {
