@@ -816,6 +816,8 @@ dependencies = [
 [[package]]
 name = "saker-rs"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5062f0b0024b08b1538e1485f2d0d6c5de959ee0d876ee32db700ba3d44e4e49"
 dependencies = [
  "rayon",
 ]
