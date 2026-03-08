@@ -3,7 +3,6 @@ resolver = "2"
 
 members = [
   "yolo_inference",
-  "onnx_graph"
 ]
 
 [workspace.lints.clippy]

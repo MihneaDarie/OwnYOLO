@@ -485,7 +485,9 @@ dependencies = [
 
 [[package]]
 name = "onnx_graph"
-version = "0.1.0"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5be48ef5ae75678c0d07648d0e874108515609e53093ed390b7a0b7c7da4b7c7"
 dependencies = [
  "anyhow",
  "ndarray",
@@ -815,9 +817,9 @@ dependencies = [
 
 [[package]]
 name = "saker-rs"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5062f0b0024b08b1538e1485f2d0d6c5de959ee0d876ee32db700ba3d44e4e49"
+checksum = "5b19f6d34d62968db4f3f6cd49230837d2ef175b7bff9850fa6130d529e42ccb"
 dependencies = [
  "rayon",
 ]

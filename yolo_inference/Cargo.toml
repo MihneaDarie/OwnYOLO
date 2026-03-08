@@ -11,8 +11,8 @@ rand = "0.8"
 ndarray-npy = "0.10.0"
 opencv = "0.97.2"
 base64 = "0.22.1"
-onnx_graph = { path = "../onnx_graph" }
 saker-rs = "0.1.0"
+onnx_graph = "0.1.1"
 
 
 [profile.release]
